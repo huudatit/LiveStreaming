@@ -1,0 +1,6 @@
+Start server:
+./livekit-server --dev --bind 0.0.0.0 --port 7880
+Start frontend:
+npx yarn start
+Create token:
+./lk.exe create-room --url http://localhost:7880 --api-key devkey --api-secret secret --name demo-room
