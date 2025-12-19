@@ -14,6 +14,6 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => console.log("❌ Client disconnected"));
 });
 
-httpServer.listen(3001, () =>
+httpServer.listen(5001, () =>
   console.log("⚡ Chat server running on port 3001")
 );

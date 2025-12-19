@@ -1,6 +1,12 @@
 import { io } from "socket.io-client";
 
-// Nếu bạn có backend sau này thì đổi thành http://localhost:5000
-export const socket = io("http://localhost:3001", {
-  transports: ["websocket"],
-});
+export const socket = io(
+  // import.meta.env.VITE_API_URL || "http://localhost:5000",
+  "http://localhost:5000",
+  {
+    transports: ["websocket"],
+    withCredentials: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 2000,
+  }
+);
