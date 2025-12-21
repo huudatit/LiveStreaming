@@ -1,36 +1,33 @@
-import app from "./app.js";
-import { createServer } from "http";
+// src/server.js
+import dotenv from "dotenv";
+import http from "http";
 import { Server } from "socket.io";
-import { setupChatHandlers } from "./socket/chatHandler.js";
-import { connectDatabase } from "./config/database.js";
+import { connectDB } from "./config/database.js";
+import { initSocketService } from "./services/socketService.js";
+import app from "./app.js";
 
-const PORT = process.env.PORT || 5000;
+dotenv.config();
 
-// Create HTTP server
-const httpServer = createServer(app);
+// Tạo HTTP server từ app
+const server = http.createServer(app);
 
-// Setup Socket.IO
-const io = new Server(httpServer, {
+// Cấu hình Socket.IO
+const io = new Server(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-    credentials: true
-  }
+    origin: [ process.env.CLIENT_URL || "http://localhost:5173" ],
+    credentials: true,
+  },
 });
 
-// Setup chat handlers
-setupChatHandlers(io);
+// Kết nối Database
+connectDB();
 
-// Connect database
-connectDatabase();
+// Khởi tạo socket service
+initSocketService(io);
 
-// Start server
-const server = app.listen(PORT, () => {
+// Lắng nghe cổng
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
-});
-
-// Handle unhandled promise rejections
-process.on("unhandledRejection", (err) => {
-  console.log(`Error: ${err.message}`);
-  server.close(() => process.exit(1));
+  console.log(`Socket.IO ready for connections`);
 });

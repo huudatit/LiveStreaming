@@ -1,23 +1,28 @@
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-import { generateToken } from "../utils/jwt.js";
-import { generateStreamKey } from "../utils/streamKey.js";
+import Session from "../models/Session.js";
+
+const ACCESS_TOKEN_TTL = "3d";
+const REFRESH_TOKEN_TTL = 14 * 24 * 60 * 60 * 1000; // 14 ngày
 
 // @desc    signUp user
 // @route   POST /api/auth/signUp
 // @access  Public
 export const signUp = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, displayName } = req.body;
 
-    // Validate input
-    if (!username || !email || !password) {
+    // Kiểm tra đầu vào
+    if (!username || !email || !password || !displayName) {
       return res.status(400).json({
         success: false,
-        message: "Please provide all required fields",
+        message: "Vui lòng nhập đầy đủ các trường bắt buộc!",
       });
     }
 
-    // Check if user exists
+    // Kiểm tra username tồn tại chưa
     const userExists = await User.findOne({
       $or: [{ email }, { username }],
     });
@@ -25,37 +30,30 @@ export const signUp = async (req, res) => {
     if (userExists) {
       return res.status(409).json({
         success: false,
-        message: "User already exists",
+        message: "Người dùng đã tồn tại!",
       });
     }
 
-    // Create user
-    const streamKey = generateStreamKey();
-    const user = await User.create({
+    // Mã hóa Password
+    const hashedPassword = await bcrypt.hash(password, 10); // salt = 10
+
+    // Tạo user mới
+    const streamKey = `sk_${crypto.randomBytes(16).toString("hex")}`;
+    await User.create({
       username,
       email,
-      password,
+      hashedPassword,
+      displayName,
       streamKey,
     });
 
-    // Generate token
-    const token = generateToken(user._id);
-
-    res.status(201).json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        streamKey: user.streamKey,
-      },
-    });
+    // return
+    return res.sendStatus(204);
   } catch (error) {
     console.error("Sign up error:", error);
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: ["Lỗi hệ thống!", error.message],
     });
   }
 };
@@ -65,63 +63,82 @@ export const signUp = async (req, res) => {
 // @access  Public
 export const signIn = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
 
-    // Validate input
-    if (!email || !password) {
+    // Kiểm tra đầu vào
+    if (!username || !password) {
       return res.status(400).json({
         success: false,
-        message: "Please provide email and password",
+        message: "Vui lòng nhập đúng email and password!",
       });
     }
 
-    // Check user exists
-    const user = await User.findOne({ email }).select("+password");
+    // Kiểm tra user đã tồn tại chưa
+    const user = await User.findOne({ username });
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: "Invalid credentials",
+        message: "Thông tin đăng nhập không hợp lệ!",
       });
     }
 
-    // Check password match
-    const isMatch = await user.matchPassword(password);
+    // Kiểm tra password so với hash password
+    const passwordCorrect = await bcrypt.compare(password, user.hashedPassword);
 
-    if (!isMatch) {
+    if (!passwordCorrect) {
       return res.status(401).json({
         success: false,
-        message: "Invalid credentials",
+        message: "Thông tin đăng nhập không hợp lệ!",
       });
     }
 
-    // Generate token
-    const token = generateToken(user._id);
+    // Tạo token
+    const accessToken = jwt.sign(
+      { userId: user._id },
+      process.env.ACCESS_TOKEN_SECRET,
+      {
+        expiresIn: ACCESS_TOKEN_TTL,
+      }
+    );
 
-    // Set cookie HTTP-only
-    res.cookie("token", token, {
+    // Tạo refresh token
+    const refreshToken = crypto.randomBytes(64).toString("hex");
+
+    // Tạo session mới để lưu refresh token
+    await Session.create({
+      userId: user._id,
+      refreshToken,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL),
+    });
+
+    // Trả refresh token về trong cookie
+    const isProd = process.env.NODE_ENV === "production";
+
+    res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
+      secure: isProd, // prod: true, dev: false (để chrome lưu cookie ở http)
+      sameSite: isProd ? "none" : "lax", // prod: 'none', dev: 'lax'
+      maxAge: REFRESH_TOKEN_TTL,
     });
 
     res.status(200).json({
       success: true,
-      message: "User signed in successfully",
-      token,
+      message: `User ${user.displayName} đã logged in!`,
       user: {
         id: user._id,
         username: user.username,
         email: user.email,
+        displayName: user.displayName,
         streamKey: user.streamKey,
       },
+      accessToken,
     });
   } catch (error) {
     console.error("Sign in error:", error);
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Lỗi hệ thống!",
     });
   }
 };
@@ -131,30 +148,39 @@ export const signIn = async (req, res) => {
 // @access  Private
 export const signOut = async (req, res) => {
   try {
-    res.clearCookie("token", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-    });
+    // Lấy refresh token từ cookie
+    const token = req.cookies?.refreshToken;
 
-    res.status(200).json({
+    if (token) {
+      // Xóa refresh token trong Session
+      await Session.deleteOne({ refreshToken: token });
+
+      // Xóa cookie
+      const isProd = process.env.NODE_ENV === "production";
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? "none" : "lax",
+      });
+    }
+
+    return res.status(204).json({
       success: true,
-      message: "User signed out successfully",
+      message: "Đăng xuất thành công!",
     });
   } catch (error) {
     console.error("Sign out error:", error);
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Lỗi hệ thống!",
     });
   }
 };
 
-
 // @desc    Get current user
 // @route   GET /api/auth/me
 // @access  Private
-export const getMe = async (req, res) => {
+export const authMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
 
@@ -169,10 +195,51 @@ export const getMe = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("GetMe error:", error);
+    console.error("AuthMe error:", error);
     res.status(500).json({
       success: false,
-      message: "Server error",
+      message: "Lỗi hệ thống",
     });
+  }
+};
+
+// @desc    Create new access token from refresh token
+// @route   GET /api/auth/refresh
+// @access  Private
+export const refreshToken = async (req, res) => {
+  try {
+    // Lấy refresh token từ cookie
+    const token = req.cookies?.refreshToken;
+    if (!token) {
+      return res.status(401).json({ message: "Token không tồn tại!" });
+    }
+
+    // So với refresh token trong db
+    const session = await Session.findOne({ refreshToken: token });
+    if (!session) {
+      return res
+        .status(403)
+        .json({ message: "Token không hợp lệ hoặc đã hết hạn!" });
+    }
+
+    // Kiểm tra hết hạn chưa
+    if (session.expiresAt < new Date()) {
+      return res.status(403).json({ message: "Token đã hết hạn!" });
+    }
+
+    // Tạo access token mới
+    const accessToken = jwt.sign(
+      {
+        userId: session.userId,
+      },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: ACCESS_TOKEN_TTL }
+    );
+
+    // Return
+    return res.status(200).json({ accessToken });
+  } catch (error) {
+    console.error("Lỗi khi gọi refreshToken", error);
+    return res.status(500).json({ message: "Lỗi hệ thống!" });
   }
 };

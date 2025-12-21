@@ -1,0 +1,364 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "🎥 Live Streaming API (LiveKit + MongoDB)",
+    "version": "2.0.1",
+    "description": "API documentation for the Real-time Interactive Live Streaming System built with Node.js, Express, LiveKit SDK v2.14, and MongoDB."
+  },
+  "servers": [
+    { "url": "http://localhost:5000/api", "description": "Local Development" }
+  ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "User registration, login, logout and token refresh"
+    },
+    {
+      "name": "LiveKit",
+      "description": "Integration with LiveKit for token generation and ingress streaming"
+    },
+    {
+      "name": "Streams",
+      "description": "Manage live stream sessions and metadata"
+    }
+  ],
+  "paths": {
+    "/auth/signup": {
+      "post": {
+        "summary": "Đăng ký tài khoản mới",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": { "type": "string", "example": "user1" },
+                  "email": { "type": "string", "example": "user1@example.com" },
+                  "password": { "type": "string", "example": "123456" },
+                  "displayName": { "type": "string", "example": "User 1" }
+                },
+                "required": ["username", "email", "password", "displayName"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User created successfully" },
+          "409": { "description": "User already exists" },
+          "400": { "description": "Missing required fields" }
+        }
+      }
+    },
+    "/auth/signin": {
+      "post": {
+        "summary": "Đăng nhập tài khoản",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": { "type": "string", "example": "user1" },
+                  "password": { "type": "string", "example": "123456" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login success",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Đăng nhập thành công",
+                  "user": {
+                    "id": "671f2b7f8a6b",
+                    "username": "user1",
+                    "email": "user1@example.com",
+                    "displayName": "User 1",
+                    "streamKey": "sk_abc123xyz"
+                  },
+                  "accessToken": "eyJhbGciOiJIUzI1NiIs..."
+                }
+              }
+            }
+          },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/auth/signout": {
+      "post": {
+        "summary": "Đăng xuất người dùng",
+        "tags": ["Authentication"],
+        "responses": {
+          "204": { "description": "Logout success" },
+          "500": { "description": "Server error" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Lấy thông tin user hiện tại (cần accessToken)",
+        "tags": ["Authentication"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "User info returned",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "user": {
+                    "id": "671f2b7f8a6b",
+                    "username": "user1",
+                    "email": "user1@example.com",
+                    "streamKey": "sk_abc123xyz",
+                    "isLive": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid access token"
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "summary": "Làm mới Access Token",
+        "tags": ["Authentication"],
+        "responses": {
+          "200": {
+            "description": "New access token created",
+            "content": {
+              "application/json": {
+                "example": { "accessToken": "eyJhbGciOiJIUzI1NiIs..." }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "/livekit/token": {
+      "post": {
+        "summary": "Tạo JWT token cho viewer hoặc streamer vào phòng LiveKit",
+        "tags": ["LiveKit"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "roomName": { "type": "string", "example": "room_user1" },
+                  "username": { "type": "string", "example": "user2" },
+                  "role": { "type": "string", "example": "host" }
+                },
+                "required": ["roomName", "username"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token created successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "token": "eyJhbGciOiJIUzI1NiIs..."
+                }
+              }
+            }
+          },
+          "400": { "description": "Missing roomName or username" }
+        }
+      }
+    },
+
+    "/livekit/ingress": {
+      "post": {
+        "summary": "Tạo ingress RTMP hoặc WHIP cho OBS/FFmpeg (SDK v2.14)",
+        "tags": ["LiveKit"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "example": "671f2b7f8a6b",
+                    "description": "ObjectId của streamer (trùng với user._id)"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["RTMP_INPUT", "WHIP_INPUT"],
+                    "example": "RTMP_INPUT",
+                    "description": "Loại ingress (RTMP hoặc WHIP)"
+                  }
+                },
+                "required": ["userId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ingress created successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Ingress created successfully",
+                  "ingress": {
+                    "ingressId": "IG_a1b2c3d4e5",
+                    "streamUrl": "rtmps://your-livekit-server/live",
+                    "streamKey": "sk_abc123xyz",
+                    "roomName": "671f2b7f8a6b",
+                    "participant": "user1"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Ingress quota exceeded (LiveKit free-tier limit reached)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "Too Many Requests: total ingress object limit exceeded"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "Lỗi khi tạo ingress"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Xóa toàn bộ ingress đang tồn tại (reset quota)",
+        "tags": ["LiveKit"],
+        "responses": {
+          "200": {
+            "description": "All ingress deleted successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "All ingress deleted successfully"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "/streams/create": {
+      "post": {
+        "summary": "Tạo buổi stream mới (MongoDB)",
+        "tags": ["Streams"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string", "example": "User1's Live Show" },
+                  "description": {
+                    "type": "string",
+                    "example": "Live chat with user2 and user3"
+                  }
+                },
+                "required": ["title"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stream created successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Buổi stream đã được tạo",
+                  "stream": {
+                    "streamId": "stream_user1_173061",
+                    "title": "User1's Live Show",
+                    "description": "Live chat with user2 and user3",
+                    "isLive": false,
+                    "status": "preparing",
+                    "viewerCount": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/streams/live": {
+      "get": {
+        "summary": "Lấy danh sách các buổi stream đang live",
+        "tags": ["Streams"],
+        "responses": {
+          "200": {
+            "description": "List of live streams",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "count": 2,
+                  "streams": [
+                    {
+                      "title": "User1 Playing Game",
+                      "streamer": { "username": "user1" }
+                    },
+                    {
+                      "title": "Chat With User2",
+                      "streamer": { "username": "user2" }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }]
+}
