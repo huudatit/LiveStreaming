@@ -8,6 +8,7 @@ import streamRoutes from "./routes/streamRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import livekitRoutes from "./routes/livekitRoutes.js";
 import reactionRoutes from "./routes/reactionRoutes.js";
+import vodRoutes from "./routes/vodRoutes.js";
 import swaggerUi from "swagger-ui-express";
 import fs from "fs";
 import path from "path";
@@ -43,8 +44,10 @@ app.use("/api/streams", streamRoutes);
 app.use("/api/livekit", livekitRoutes);
 app.use("/api/reactions", reactionRoutes);
 
+
 // Private routes
 app.use("/api/users", userRoutes);
+app.use("/api/vod", vodRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

@@ -1,10 +1,10 @@
 import crypto from "crypto";
 import Stream from "../models/Stream.js";
 import { createRoom, deleteRoom } from "../services/livekitService.js";
-import { RoomServiceClient } from "livekit-server-sdk"; 
-import { livekitConfig } from "../config/livekit.js";  
+import { RoomServiceClient } from "livekit-server-sdk";
+import { livekitConfig } from "../config/livekit.js";
 
-const roomService = new RoomServiceClient( 
+const roomService = new RoomServiceClient(
   livekitConfig.url,
   livekitConfig.apiKey,
   livekitConfig.apiSecret
@@ -14,24 +14,36 @@ const roomService = new RoomServiceClient(
 export const createStream = async (req, res) => {
   try {
     const { title, description } = req.body;
-    const userId = req.user._id; 
+    const userId = req.user._id;
 
     if (!title) {
-      return res.status(400).json({ success: false, message: "Vui lòng nhập tiêu đề cho buổi stream" });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Vui lòng nhập tiêu đề cho buổi stream",
+        });
     }
 
     // (Tuỳ chọn) Chặn nếu user đang có stream live chưa kết thúc
-    const existingLive = await Stream.findOne({ streamer: userId, isLive: true, status: "live" });
+    const existingLive = await Stream.findOne({
+      streamerId: userId,
+      isLive: true,
+      status: "live",
+    });
     if (existingLive) {
       return res.status(409).json({
         success: false,
-        message: "Bạn đang có một buổi stream đang phát. Hãy kết thúc trước khi tạo buổi mới.",
+        message:
+          "Bạn đang có một buổi stream đang phát. Hãy kết thúc trước khi tạo buổi mới.",
         stream: existingLive,
       });
     }
 
     // Tạo roomName duy nhất (không tái sử dụng _id user)
-    const roomName = `room_${userId.toString()}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+    const roomName = `room_${userId.toString()}_${Date.now()}_${crypto
+      .randomBytes(4)
+      .toString("hex")}`;
 
     // Tạo phòng trên LiveKit
     await createRoom(roomName, { title, streamerId: userId.toString() });
@@ -39,8 +51,10 @@ export const createStream = async (req, res) => {
     // Lưu vào Mongo
     const newStream = await Stream.create({
       streamId: roomName,
+      roomName: roomName,
       title,
       description,
+      streamerId: userId,
       streamer: userId,
       isLive: true,
       status: "live",
@@ -48,10 +62,21 @@ export const createStream = async (req, res) => {
       viewerCount: 0,
     });
 
-    res.status(201).json({ success: true, message: "Buổi stream đã được tạo", stream: newStream });
+    res
+      .status(201)
+      .json({
+        success: true,
+        message: "Buổi stream đã được tạo",
+        stream: newStream,
+      });
   } catch (error) {
     console.error("Lỗi khi tạo stream:", error);
-    res.status(500).json({ success: false, message: error.message || "Không thể tạo buổi stream" });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Không thể tạo buổi stream",
+      });
   }
 };
 
@@ -89,7 +114,6 @@ export const getLiveStreams = async (_req, res) => {
   }
 };
 
-
 // GET /api/streams/me/live  (Private)
 export const meLive = async (req, res) => {
   try {
@@ -107,7 +131,6 @@ export const meLive = async (req, res) => {
   }
 };
 
-
 // GET /api/streams/:id  (Public)
 // Hỗ trợ cả Mongo _id (24 hex) và streamId (roomName)
 export const getStreamById = async (req, res) => {
@@ -117,13 +140,21 @@ export const getStreamById = async (req, res) => {
     const isMongoId = /^[a-f\d]{24}$/i.test(id);
     const query = isMongoId ? { _id: id } : { streamId: id };
 
-    const stream = await Stream.findOne(query).populate("streamer", "username displayName email");
-    if (!stream) return res.status(404).json({ success: false, message: "Không tìm thấy buổi stream" });
+    const stream = await Stream.findOne(query).populate(
+      "streamer",
+      "username displayName email"
+    );
+    if (!stream)
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy buổi stream" });
 
     res.status(200).json({ success: true, stream });
   } catch (error) {
     console.error("Lỗi khi lấy thông tin stream:", error);
-    res.status(500).json({ success: false, message: "Không thể lấy thông tin buổi stream" });
+    res
+      .status(500)
+      .json({ success: false, message: "Không thể lấy thông tin buổi stream" });
   }
 };
 
@@ -137,10 +168,15 @@ export const endStream = async (req, res) => {
 
     const stream = await Stream.findOne(query);
     if (!stream)
-      return res.status(404).json({ success: false, message: "Không tìm thấy buổi stream" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy buổi stream" });
 
     if (!stream.isLive || stream.status === "ended") {
-      return res.json({ success: true, message: "Buổi stream đã kết thúc trước đó" });
+      return res.json({
+        success: true,
+        message: "Buổi stream đã kết thúc trước đó",
+      });
     }
 
     stream.isLive = false;
@@ -160,10 +196,11 @@ export const endStream = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, message: "Không thể kết thúc stream" });
+    res
+      .status(500)
+      .json({ success: false, message: "Không thể kết thúc stream" });
   }
 };
-
 
 // PATCH /api/streams/:id  (Private)
 export const updateStream = async (req, res) => {
@@ -185,12 +222,10 @@ export const updateStream = async (req, res) => {
     );
 
     if (!stream)
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "Không tìm thấy buổi stream để cập nhật",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy buổi stream để cập nhật",
+      });
     res
       .status(200)
       .json({ success: true, message: "Cập nhật thành công", stream });
@@ -214,7 +249,8 @@ export const getVodStreams = async (req, res) => {
 
     res.json({ success: true, items: vods });
   } catch (e) {
-    res.status(500).json({ success: false, message: "Không thể lấy danh sách VOD" });
+    res
+      .status(500)
+      .json({ success: false, message: "Không thể lấy danh sách VOD" });
   }
 };
-

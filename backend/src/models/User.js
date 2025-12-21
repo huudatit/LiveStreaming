@@ -54,7 +54,7 @@ const userSchema = new mongoose.Schema(
     totalViews: {
       type: Number,
       default: 0,
-    }
+    },
   },
   {
     timestamps: true,

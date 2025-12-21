@@ -75,7 +75,7 @@ export default function ChatBox({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder="Nhập tin nhắn..."
-            className="bg-black/40 border-white/10 text-white placeholder:text-slate-500 w-90"
+            className="bg-black/40 border-white/10 text-white placeholder:text-slate-500 w-80"
           />
           <Button
             onClick={handleSend}
