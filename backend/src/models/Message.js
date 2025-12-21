@@ -2,11 +2,12 @@ import mongoose from "mongoose";
 
 const messageSchema = new mongoose.Schema({
   streamId: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Stream",
     required: true,
-    index: true,
+    index: true
   },
-  user: {
+  userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
@@ -20,11 +21,18 @@ const messageSchema = new mongoose.Schema({
     required: true,
     maxlength: 500,
   },
-  createdAt: {
+  type: {
+    type: String,
+    enum: ['text', 'system'],
+    default: 'text'
+  },
+  timestamp: {
     type: Date,
     default: Date.now,
-    expires: 86400, // Auto delete after 24 hours
   },
 });
+
+// Tự động xóa messages sau 24 giờ
+messageSchema.index({ createdAt: 1 }, { expireAfterSeconds: 86400 });
 
 export default mongoose.model("Message", messageSchema);

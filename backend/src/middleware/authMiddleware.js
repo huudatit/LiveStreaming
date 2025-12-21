@@ -1,45 +1,40 @@
+import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-import { verifyToken } from "../utils/jwt.js";
 
-export const protect = async (req, res, next) => {
+export const protectedRoute = async (req, res, next) => {
   try {
-    let token;
+    // Lấy token từ header
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1]; // Bearer <token>
 
-    // Check header for token
-    if (req.cookies && req.cookies.token) {
-      token = req.cookies.token;
-    } else if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith("Bearer")
-    ) {
-      token = req.headers.authorization.split(" ")[1];
-    }
-
-    // Check if token exists
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: "Not authorized to access this route",
+        message: "Không tìm thấy access token",
       });
     }
+    // Xác nhận token hợp lệ
+    jwt.verify(
+      token,
+      process.env.ACCESS_TOKEN_SECRET,
+      async (err, decodedUser) => {
+        if (err) {
+          console.error(err);
+          return res.status(403).json({message: "Access token hết hạn hoặc không đúng!"})
+        }
 
-    // Save token to request object
-    req.token = token;
+        // Tìm user
+        const user = await User.findById(decodedUser.userId).select('-hashedPassword');
 
-    // Verify token
-    const decoded = verifyToken(token);
+        if (!user) {
+          return res.status(404).json({ message: 'Người dùng không tồn tại.' });
+        }
 
-    // Get user from token
-    req.user = await User.findById(decoded.id);
-
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    next();
+        // Trả về user trong req
+        req.user = user;
+        next();
+      }
+    );
   } catch (error) {
     console.error("Auth middleware error:", error);
     res.status(401).json({
