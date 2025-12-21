@@ -68,21 +68,25 @@ export const listParticipants = (roomName) =>
 export async function createIngress({
   type = "RTMP",
   name = "default-ingress",
+  roomName,
+  participantIdentity,
+  participantName,
 }) {
-  // RTMP dành cho OBS/XSplit, WHIP dành cho WebRTC push
   const inputType =
     type === "WHIP" ? IngressInput.WHIP_INPUT : IngressInput.RTMP_INPUT;
 
   const { ingressInfo } = await ingressClient.createIngress({
     inputType,
     name,
-    // optional: roomName, participantName nếu bạn muốn cố định
+    roomName,
+    participantIdentity,
+    participantName,
+    audio: { preset: IngressAudioEncodingPreset.OPUS_STEREO_96K },
+    video: { preset: IngressVideoEncodingPreset.H264_1080P_30FPS_3_LAYERS },
   });
 
-  // Bảo vệ: không log streamKey
   return {
     ingressId: ingressInfo?.ingressId,
-    // LiveKit trả về streamKey; Server URL bạn dùng env cố định để hiển thị
     serverUrl: livekitConfig.rtmpServerUrl,
     streamKey: ingressInfo?.streamKey ?? "",
     type,

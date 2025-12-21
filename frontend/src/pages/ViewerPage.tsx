@@ -7,173 +7,288 @@ import {
   AudioTrack,
   useRemoteParticipants,
 } from "@livekit/components-react";
-import { RemoteTrackPublication, Track } from "livekit-client";
-import { streamService } from "@/services/streamService";
+import { Track, VideoQuality } from "livekit-client";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { fetchViewerToken } from "@/services/streamService";
 import ReactionButtons from "@/components/stream/ReactionButtons";
 import { useStreamStore } from "@/stores/useStreamStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import ChatBox from "@/components/chat/ChatBox";
 import { toast } from "sonner";
-import ResolutionSelector from "@/components/stream/ResolutionSelector";
-import type { Stream } from "@/types/stream";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import pauseIcon from "@/assets/pause.png";
+import continueIcon from "@/assets/continue.png";
+import muteIcon from "@/assets/mute.png";
+import soundIcon from "@/assets/sound.png";
+import ReactionOverlay from "@/components/stream/ReactionOverlay";
 
-function StreamView() {
+function StreamView({
+  reactions,
+}: {
+  reactions: { id: string; emoji: string; x: number; delay: number }[];
+}) {
   const participants = useRemoteParticipants();
   const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone]);
-  const [paused, setPaused] = useState(false);
+
   const videoTrackRef = tracks.find((t) => t.source === Track.Source.Camera);
   const audioTrackRef = tracks.find(
     (t) => t.source === Track.Source.Microphone
   );
 
+  // publication (RemoteTrackPublication) dùng để subscribe/unsubscribe
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const videoPub = videoTrackRef?.publication as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const audioPub = audioTrackRef?.publication as any;
+
+  const [paused, setPaused] = useState(false); // pause = unsubscribe cả video+audio
+  const [muted, setMuted] = useState(false); // mute = unsubscribe audio
+  const [quality, setQuality] = useState<VideoQuality>(VideoQuality.HIGH);
+
+  // Helper: subscribe/unsubscribe an toàn
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const setSubscribedSafe = async (pub: any, subscribed: boolean) => {
+    if (!pub) return;
+    if (typeof pub.setSubscribed === "function") {
+      await pub.setSubscribed(subscribed);
+      return;
+    }
+    // fallback hiếm: disable track
+    if (pub.track && typeof pub.track.setEnabled === "function") {
+      pub.track.setEnabled(subscribed);
+    }
+  };
+
+  // Helper: set quality an toàn (tránh crash như lỗi trước)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const setQualitySafe = async (pub: any, q: VideoQuality) => {
+    if (!pub) return;
+
+    // Tùy phiên bản, method có thể khác nhau
+    if (typeof pub.setVideoQuality === "function") {
+      pub.setVideoQuality(q);
+      return;
+    }
+    if (typeof pub.setPreferredVideoQuality === "function") {
+      pub.setPreferredVideoQuality(q);
+      return;
+    }
+
+    console.warn(
+      "Quality switching not supported by this publication/version",
+      pub
+    );
+  };
+
+  const settings =
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      videoTrackRef?.publication?.track as any
+    )?.mediaStreamTrack?.getSettings?.();
+
+  console.log("Current video settings:", settings);
+
+  // Nếu chưa có remote participant nào (streamer chưa publish)
   if (!participants.length) {
     return (
-      <div className="aspect-video rounded-xl border border-white/10 grid place-items-center text-white bg-black">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
-          <p>Đang chờ streamer...</p>
-        </div>
+      <div className="aspect-video rounded-xl border border-white/10 grid place-items-center text-white">
+        Đang chờ streamer…
       </div>
     );
   }
 
+  const onTogglePause = async () => {
+    // Pause = ngừng nhận video + audio
+    if (!paused) {
+      await setSubscribedSafe(videoPub, false);
+      await setSubscribedSafe(audioPub, false);
+      setPaused(true);
+      return;
+    }
+
+    // Continue = nhận lại video + audio (audio phụ thuộc muted)
+    await setSubscribedSafe(videoPub, true);
+    await setSubscribedSafe(audioPub, !muted);
+    setPaused(false);
+  };
+
+  const onToggleMute = async () => {
+    // Mute chỉ ảnh hưởng audio; nếu đang pause thì chỉ đổi state, không subscribe lại
+    if (!audioPub) {
+      setMuted((m) => !m);
+      return;
+    }
+
+    if (!muted) {
+      await setSubscribedSafe(audioPub, false);
+      setMuted(true);
+      return;
+    }
+
+    // Unmute: chỉ subscribe audio nếu không paused
+    if (!paused) await setSubscribedSafe(audioPub, true);
+    setMuted(false);
+  };
+
+  const onChangeQuality = async (q: VideoQuality) => {
+    setQuality(q);
+    await setQualitySafe(videoPub, q);
+  };
+
   return (
     <div className="relative aspect-video rounded-xl overflow-hidden bg-black">
+      {/* Video fill full */}
       {videoTrackRef && (
-        <>
-          <VideoTrack trackRef={videoTrackRef} />
-          <ResolutionSelector track={videoTrackRef.publication} />
-        </>
+        <VideoTrack
+          trackRef={videoTrackRef}
+          className="absolute inset-0 w-full h-full object-contain"
+        />
       )}
+
+      {/* Audio (sẽ bị mute/pause bằng setSubscribed) */}
+      <ReactionOverlay reactions={reactions} />
       {audioTrackRef && <AudioTrack trackRef={audioTrackRef} />}
 
-      {/* Nút Play/Pause */}
-      <Button
-        onClick={() => {
-          const vpub = videoTrackRef?.publication as
-            | RemoteTrackPublication
-            | undefined;
-          const apub = audioTrackRef?.publication as
-            | RemoteTrackPublication
-            | undefined;
+      {/* LIVE + viewer count */}
+      <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
+        <div className="bg-black/60 px-3 py-1.5 rounded-lg text-sm">
+          <span className="text-red-500">●</span> LIVE
+        </div>
+        <div className="bg-black/60 px-3 py-1.5 rounded-lg text-sm">
+          {participants.length} đang xem
+        </div>
+      </div>
 
-          if (!vpub) return;
+      {/* Minimal controls */}
+      <div className="absolute inset-x-0 bottom-0 z-20 p-3">
+        <div className="bg-black/55 backdrop-blur rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={onTogglePause}
+              className="bg-white/10 hover:bg-white/20"
+              variant="secondary"
+            >
+              <img
+                src={paused ? continueIcon : pauseIcon}
+                alt={paused ? "Continue" : "Pause"}
+                className="w-5 h-5"
+              />
+            </Button>
 
-          if (paused) {
-            vpub.setSubscribed(true);
-            apub?.setSubscribed(true);
-          } else {
-            vpub.setSubscribed(false);
-            apub?.setSubscribed(false);
-          }
+            <Button
+              onClick={onToggleMute}
+              className="bg-white/10 hover:bg-white/20"
+              variant="secondary"
+            >
+              <img
+                src={muted ? soundIcon : muteIcon}
+                alt={muted ? "Unmute" : "Mute"}
+                className="w-5 h-5"
+              />
+            </Button>
+          </div>
 
-          setPaused(!paused);
-        }}
-      >
-        {paused ? "▶️ Tiếp tục" : "⏸️ Tạm dừng"}
-      </Button>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-200/80">Quality:</span>
 
-      {/* Viewer count */}
-      <div className="absolute top-3 left-3 bg-red-600/90 px-3 py-1.5 rounded-lg text-sm z-10 flex items-center gap-2">
-        <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-        <span>{participants.length} đang xem</span>
+            <Select
+              value={String(quality)}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              onValueChange={(v) => onChangeQuality(Number(v) as any)}
+            >
+              <SelectTrigger className="h-9 w-[110px] bg-white/10 border-white/10 text-white hover:bg-white/15 rounded-xl focus:ring-0">
+                <SelectValue placeholder="Quality" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#0b0f1a]/95 border-white/10 text-white backdrop-blur">
+                <SelectItem value={String(0)}>360P</SelectItem>
+                <SelectItem value={String(1)}>480P</SelectItem>
+                <SelectItem value={String(2)}>720P</SelectItem>
+                {/* <SelectItem value={String(3)}>1080P</SelectItem> */}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 export default function ViewerPage() {
-  const { streamId = "" } = useParams();
+  const params = useParams();
+  const room = params.room ?? params.streamId ?? "";
   const { user } = useAuthStore();
   const username = user?.username || "guest";
 
-  const [stream, setStream] = useState<Stream | null>(null);
+  // Lưu ý: sử dụng room (streamId) cho state realtime (reactions/chat) để đồng bộ
+  const { reactions } = useStreamStore(room, username, user?._id);
+
   const [token, setToken] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const serverUrl = import.meta.env.VITE_LIVEKIT_URL as string;
 
-  const { viewerCount } = useStreamStore(
-    stream?.roomName || streamId,
-    username,
-    user?._id
-  );
-
-  // Tạo thông tin
+  // Tạo identity chỉ 1 lần cho toàn bộ vòng đời component (ưu tiên lấy từ sessionStorage)
   const [identity] = useState(() => {
     const saved = sessionStorage.getItem("viewer_identity");
     if (saved) return saved;
+
     const newId =
       user?.username || `viewer_${Math.floor(Math.random() * 10000)}`;
     sessionStorage.setItem("viewer_identity", newId);
     return newId;
   });
 
-  // Lấy thông tin của buổi stream
+  // Log debug (có thể xóa khi production)
   useEffect(() => {
-    const fetchStream = async () => {
-      try {
-        const streamData = await streamService.getById(streamId);
-        setStream(streamData);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } catch (e: any) {
-        setErr(e.response?.data?.message || "Stream không tồn tại");
-      }
-    };
-    fetchStream();
-  }, [streamId]);
+    console.log("🎬 ViewerPage mounted with room:", room);
+    console.log("👤 Username:", username);
+    console.log("🎉 Reactions state:", reactions);
+  }, [room, username, reactions]);
 
-  // Lấy viewer token
+  // Lấy token để viewer join vào phòng LiveKit
   useEffect(() => {
-    const getToken = async () => {
-      if (!streamId) return;
+    (async () => {
       try {
-        const t = await streamService.getViewerToken(streamId, identity);
+        const t = await fetchViewerToken(room, identity);
         setToken(t);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (e: any) {
         setErr(e.response?.data?.message || e.message || "Không thể lấy token");
       }
-    };
-    getToken();
-  }, [streamId, identity]);
+    })();
+  }, [room, identity]);
 
-  if (err) {
+  // Hiển thị lỗi nếu có
+  if (err)
     return (
-      <div className="min-h-screen grid place-items-center text-white bg-[#0b0f1a]">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold mb-4">{err}</h1>
-          <a href="/" className="text-purple-400 hover:underline">
-            Quay lại trang chủ
-          </a>
-        </div>
+      <div className="min-h-screen grid place-items-center text-white">
+        {err}
       </div>
     );
-  }
 
-  if (!token || !stream) {
+  // Đang chờ token
+  if (!token)
     return (
-      <div className="min-h-screen grid place-items-center text-white bg-[#0b0f1a]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500 mx-auto mb-4"></div>
-          <p>Đang tải stream...</p>
-        </div>
+      <div className="min-h-screen grid place-items-center text-white">
+        Đang tải stream…
       </div>
     );
-  }
 
+  // Màn hình “sẵn sàng xem” để yêu cầu người dùng bấm nút (tránh autoplay audio bị chặn)
   if (!ready) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#0b0f1a] text-white">
-        <div className="text-center max-w-md">
-          <h1 className="text-2xl font-semibold mb-4">🎬 {stream.title}</h1>
-          <p className="text-slate-400 mb-2">
-            Streamer:{" "}
-            <span className="text-white">{stream.streamerUsername}</span>
-          </p>
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold mb-4">
+            🎬 Sẵn sàng xem livestream
+          </h1>
           <p className="text-slate-400 mb-6">
             Nhấn nút bên dưới để bắt đầu và bật âm thanh.
           </p>
@@ -190,60 +305,31 @@ export default function ViewerPage() {
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white p-4">
-      <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4">
-          {/* Video + Info */}
-          <div className="space-y-4">
-            {/* Video Player */}
-            <LiveKitRoom
-              serverUrl={serverUrl}
-              token={token}
-              connect={ready}
-              audio={false}
-              video={false}
-              options={{
-                adaptiveStream: true,
-                dynacast: true,
-              }}
-              onConnected={() => toast.success("Đã kết nối tới LiveKit!")}
-            >
-              <StreamView />
-            </LiveKitRoom>
+      <div className="max-w-8xl mx-auto flex flex-col lg:flex-row gap-4 h-[calc(100vh-5rem)]">
+        {/* Khu vực video + reactions: chiếm phần lớn màn hình */}
+        <div className="flex-1 relative">
+          <LiveKitRoom
+            serverUrl={serverUrl}
+            token={token}
+            connect={ready}
+            audio={false}
+            video={false}
+            options={{
+              adaptiveStream: false,
+              dynacast: true,
+            }}
+            onConnected={() => toast.success("Đã kết nối tới LiveKit!")}
+          >
+            <StreamView reactions={reactions} />
+          </LiveKitRoom>
+        </div>
 
-            {/* Stream Info */}
-            <Card className="bg-white/5 border-white/10">
-              <CardHeader>
-                <CardTitle className="text-xl">{stream.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {stream.description && (
-                  <p className="text-slate-300 text-sm">{stream.description}</p>
-                )}
-
-                <div className="flex items-center justify-between pt-3 border-t border-white/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center font-semibold">
-                      {stream.streamerUsername?.[0]?.toUpperCase() || "?"}
-                    </div>
-                    <div>
-                      <p className="font-medium">{stream.streamerUsername}</p>
-                      <p className="text-sm text-slate-400">Streamer</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <Eye className="size-4" />
-                    <span>{viewerCount} Người xem</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Chat + Reactions */}
-          <div className="space-y-4">
-            <ChatBox streamId={streamId} roomName={stream.roomName} />
-            <ReactionButtons roomName={stream.roomName} />
+        {/* Khu vực chat: đặt ở cột bên phải */}
+        <div className="w-full lg:w-1/4 flex flex-col">
+          <div className="flex-1">
+            {/* Truyền room (streamId) cho cả streamId và roomName để đồng bộ realtime */}
+            <ChatBox streamId={room} roomName={room} />
+            <ReactionButtons roomName={room} />
           </div>
         </div>
       </div>

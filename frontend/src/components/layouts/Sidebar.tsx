@@ -3,7 +3,7 @@ import { NavLink } from "react-router-dom";
 export default function Sidebar() {
   return (
     <aside className="hidden md:flex fixed left-0 top-14 h-screen w-60 flex-col border-white/10 bg-[#0b0f1a]/80 backdrop-blur-lg z-20">
-      {/* Navigation */}
+      {/* Thanh điều hướng (Navigation) */}
       <nav className="p-3 space-y-2 text-sm">
         <NavLink
           to="/"
@@ -33,12 +33,13 @@ export default function Sidebar() {
           Dashboard
         </NavLink>
 
-        {/* Subscriptions */}
+        {/* Khu vực kênh đang theo dõi (Subscriptions) */}
         <div className="mt-4">
           <p className="text-xs uppercase text-slate-400 mb-2">Subscriptions</p>
+
           <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-            {/* Danh sách streamer mà user đã theo dõi */}
-            {/* TODO: thay bằng map dữ liệu thật */}
+            {/* Danh sách streamer mà user đang theo dõi */}
+            {/* TODO: thay bằng dữ liệu thật (map từ API/store) */}
             {["streamer01", "streamer02", "streamer03"].map((name) => (
               <div
                 key={name}

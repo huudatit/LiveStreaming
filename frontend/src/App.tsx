@@ -10,7 +10,7 @@ import SignUpPage from "@/pages/SignUpPage";
 import DashboardPage from "@/pages/DashboardPage";
 import KeysPage from "@/pages/KeysPage";
 import ViewerPage from "@/pages/ViewerPage";
-import VODPlayerPage from "@/pages/VODPlayerPage";
+// import VODPlayerPage from "@/pages/VODPlayerPage";
 
 export default function App() {
   return (
@@ -24,7 +24,7 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/keys" element={<KeysPage />} />
         <Route path="/watch/:streamId" element={<ViewerPage />} />
-        <Route path="/vod/:vodId" element={<VODPlayerPage />} />
+        {/* <Route path="/vod/:vodId" element={<VODPlayerPage />} /> */}
       </Route>
 
       {/* Protected Routes with Layout */}
@@ -34,7 +34,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/keys" element={<KeysPage />} />
           <Route path="/watch/:streamId" element={<ViewerPage />} />
-          <Route path="/vod/:vodId" element={<VODPlayerPage />} />
+          {/* <Route path="/vod/:vodId" element={<VODPlayerPage />} /> */}
         </Route>
       </Route>
 

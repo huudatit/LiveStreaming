@@ -6,7 +6,7 @@ import {
   getLiveStreams,
   meLive,
   updateStream,
-  getVodStreams
+  getVodStreams,
 } from "../controllers/streamController.js";
 import { protectedRoute } from "../middleware/authMiddleware.js";
 
@@ -48,6 +48,5 @@ router.get("/room/:name/participants", async (req, res) => {
 });
 
 router.get("/vod", protectedRoute, getVodStreams);
-
 
 export default router;

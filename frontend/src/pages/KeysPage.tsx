@@ -1,11 +1,9 @@
 // src/pages/KeysPage.tsx
 import { useState, useTransition } from "react";
-import { Copy, Eye, EyeOff, Play } from "lucide-react";
+import { Copy, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/axios";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { streamService } from "@/services/streamService";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -25,42 +23,48 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 
 export default function KeysPage() {
-  const navigate = useNavigate();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
-  const [startStreamOpen, setStartStreamOpen] = useState(false);
-
   const [serverUrl, setServerUrl] = useState("");
   const [streamKey, setStreamKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [ingressType, setIngressType] = useState("RTMP_INPUT");
 
-  // Form tạo luồng stream
-  const [streamForm, setStreamForm] = useState({
-    title: "",
-    description: "",
-  });
-
-  const { user } = useAuthStore();
-
-  // Gọi API backend tạo ingress (RTMP/WHIP)
+  // Gọi API backend để tạo ingress (tạo thông tin kết nối: server URL + stream key)
   const handleGenerate = async () => {
+    const { user } = useAuthStore.getState();
+    console.log("🔍 user hiện tại:", user);
+
+    // Nếu chưa đăng nhập thì không cho tạo ingress
     if (!user) {
       toast.error("Bạn cần đăng nhập trước!");
       return;
     }
 
+    // Dùng transition để tránh UI bị giật/đơ khi đang gọi API
     startTransition(async () => {
       try {
+        // Log payload gửi lên backend (phục vụ debug)
+        console.log("🛰 Payload gửi đi:", {
+          userId: user._id,
+          type: ingressType,
+        });
+
+        // Gọi API tạo ingress theo loại (RTMP/WHIP)
         const res = await api.post("/livekit/ingress", {
           userId: user._id,
           type: ingressType,
         });
 
+        // Log xác nhận request đã được gửi
+        console.log("✅ Sent to backend:", {
+          userId: user._id,
+          type: ingressType,
+        });
+
+        // Nếu backend trả về thành công: lấy server URL + stream key và hiển thị
         if (res.data.success) {
           const { streamUrl, streamKey } = res.data.ingress;
           setServerUrl(streamUrl);
@@ -68,174 +72,112 @@ export default function KeysPage() {
           toast.success("Tạo ingress thành công!");
           setOpen(false);
         } else {
+          // Backend trả về không thành công (có message)
           toast.error(res.data.message || "Không thể tạo ingress");
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
+        // Xử lý lỗi khi gọi API thất bại (network/server)
         console.error("Lỗi:", err);
         toast.error(err.response?.data?.message || "Lỗi server!");
       }
     });
   };
 
-  // Bắt đầu live stream
-  const handleStartStream = async () => {
-    if (!streamForm.title.trim()) {
-      toast.error("Vui lòng nhập tiêu đề stream!");
-      return;
-    }
-
-    try {
-      const response = await streamService.start({
-        title: streamForm.title,
-        description: streamForm.description,
-      });
-
-      if (response.success) {
-        toast.success("Đã bắt đầu stream!");
-        setStartStreamOpen(false);
-        navigate("/dashboard");
-      }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Không thể bắt đầu stream");
-    }
-  };
-
+  // Sao chép nội dung (serverUrl/streamKey) vào clipboard
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("Đã sao chép vào bộ nhớ tạm!");
+      toast.success("Copied to clipboard!");
     } catch {
-      toast.error("Sao chép thất bại!");
+      toast.error("Copy failed");
     }
   };
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
-      {/* Header */}
+      {/* Phần tiêu đề trang + nút mở hộp thoại tạo kết nối */}
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Keys & URLs</h1>
-        <div className="flex gap-2">
-          {/* Nút bắt đầu live */}
-          <Dialog open={startStreamOpen} onOpenChange={setStartStreamOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-green-600 hover:bg-green-700 text-white">
-                <Play className="size-4 mr-2" />
-                Start Stream
-              </Button>
-            </DialogTrigger>
 
-            <DialogContent className="bg-[#0b0f1a]/95 backdrop-blur-lg border border-white/10 text-white">
-              <DialogHeader>
-                <DialogTitle>Bắt đầu Live Stream</DialogTitle>
-                <DialogDescription>
-                  Nhập thông tin cho buổi phát trực tiếp
-                </DialogDescription>
-              </DialogHeader>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button
+              className="bg-primary/90 hover:bg-primary text-white"
+              onClick={() => setOpen(true)}
+            >
+              Generate Connection
+            </Button>
+          </DialogTrigger>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm mb-2">Tiêu đề</label>
-                  <Input
-                    value={streamForm.title}
-                    onChange={(e) =>
-                      setStreamForm({ ...streamForm, title: e.target.value })
-                    }
-                    placeholder="Nhập tiêu đề cho Live Stream"
-                    className="bg-black/40 border-white/10 text-white"
-                  />
-                </div>
+          <DialogContent className="bg-[#0b0f1a]/95 backdrop-blur-lg border border-white/10 text-white">
+            <DialogHeader>
+              <DialogTitle>Generate Connection</DialogTitle>
+              <DialogDescription>
+                Select type connection to generate new ingress.
+              </DialogDescription>
+            </DialogHeader>
 
-                <div>
-                  <label className="block text-sm mb-2">Mô tả (tùy chọn)</label>
-                  <Textarea
-                    value={streamForm.description}
-                    onChange={(e) =>
-                      setStreamForm({
-                        ...streamForm,
-                        description: e.target.value,
-                      })
-                    }
-                    placeholder="Mô tả về buổi phát..."
-                    className="bg-black/40 border-white/10 text-white min-h-[100px]"
-                  />
-                </div>
+            <div className="space-y-4">
+              {/* Chọn loại ingress (RTMP hoặc WHIP) */}
+              <div>
+                <label className="block text-sm mb-2">Type</label>
+
+                <Select value={ingressType} onValueChange={setIngressType}>
+                  <SelectTrigger className="w-full bg-black/40 border border-white/10 text-slate-200 focus:ring-2 focus:ring-purple-500">
+                    <SelectValue placeholder="Chọn loại ingress" />
+                  </SelectTrigger>
+
+                  <SelectContent className="bg-[#0b0f1a]/95 border-white/10 text-slate-200">
+                    <SelectItem
+                      value="RTMP_INPUT"
+                      className="transition-colors data-highlighted:bg-purple-600 data-highlighted:text-white"
+                    >
+                      RTMP
+                    </SelectItem>
+
+                    <SelectItem
+                      value="WHIP_INPUT"
+                      className="transition-colors data-highlighted:bg-purple-600 data-highlighted:text-white"
+                    >
+                      WHIP
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <DialogFooter className="mt-4 flex justify-end gap-2">
-                <DialogClose asChild>
-                  <Button variant="secondary">Hủy</Button>
-                </DialogClose>
-                <Button
-                  onClick={handleStartStream}
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                >
-                  Bắt đầu
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              {/* Cảnh báo: tạo ingress mới có thể reset các stream đang hoạt động */}
+              <Alert
+                variant="default"
+                className="bg-red-500/10 border-red-400/30 text-white"
+              >
+                <AlertTitle>⚠ Warning</AlertTitle>
+                <AlertDescription>
+                  This will reset all active streams.
+                </AlertDescription>
+              </Alert>
+            </div>
 
-          {/* Nút khởi tạo kết nối */}
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary/90 hover:bg-primary text-white">
-                Tạo kết nối
+            <DialogFooter className="mt-4 flex justify-end gap-2">
+              {/* Đóng hộp thoại */}
+              <DialogClose asChild>
+                <Button variant="secondary">Cancel</Button>
+              </DialogClose>
+
+              {/* Gọi tạo ingress */}
+              <Button
+                onClick={handleGenerate}
+                disabled={isPending}
+                className="bg-purple-600 hover:bg-purple-500 text-white"
+              >
+                {isPending ? "Generating..." : "Generate"}
               </Button>
-            </DialogTrigger>
-
-            <DialogContent className="bg-[#0b0f1a]/95 backdrop-blur-lg border border-white/10 text-white">
-              <DialogHeader>
-                <DialogTitle>Tạo kết nối</DialogTitle>
-                <DialogDescription>
-                  Chọn loại kết nối để tạo ingress mới.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm mb-2">Type</label>
-                  <Select value={ingressType} onValueChange={setIngressType}>
-                    <SelectTrigger className="w-full bg-black/40 border border-white/10 text-slate-200">
-                      <SelectValue placeholder="Chọn loại ingress" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#0b0f1a]/95 border-white/10 text-slate-200">
-                      <SelectItem value="RTMP_INPUT">RTMP</SelectItem>
-                      <SelectItem value="WHIP_INPUT">WHIP</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Alert
-                  variant="default"
-                  className="bg-red-500/10 border-red-400/30 text-white"
-                >
-                  <AlertTitle>⚠️ Cảnh báo</AlertTitle>
-                  <AlertDescription>
-                    Thao tác này sẽ đặt lại tất cả các luồng đang hoạt động.
-                  </AlertDescription>
-                </Alert>
-              </div>
-
-              <DialogFooter className="mt-4 flex justify-end gap-2">
-                <DialogClose asChild>
-                  <Button variant="secondary">Hủy</Button>
-                </DialogClose>
-                <Button
-                  onClick={handleGenerate}
-                  disabled={isPending}
-                  className="bg-purple-600 hover:bg-purple-500 text-white"
-                >
-                  {isPending ? "Đang tạo..." : "Tạo"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* Server URL */}
+      {/* Hiển thị Server URL (có nút copy) */}
       <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-4">
         <label className="block text-sm mb-2">Server URL</label>
         <div className="flex items-center gap-2">
@@ -255,11 +197,13 @@ export default function KeysPage() {
         </div>
       </div>
 
-      {/* Khóa Stream */}
+      {/* Hiển thị Stream Key (ẩn/hiện + copy) */}
       <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-4">
         <label className="block text-sm mb-2">Stream Key</label>
+
         <div className="flex items-center gap-2">
           <input
+            // Cho phép ẩn/hiện stream key để tránh lộ thông tin
             type={showKey ? "text" : "password"}
             className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-sm tracking-widest"
             value={streamKey}
@@ -275,6 +219,7 @@ export default function KeysPage() {
           </Button>
         </div>
 
+        {/* Nút ẩn/hiện stream key */}
         <button
           className="mt-2 text-sm text-white/70 hover:text-white inline-flex items-center gap-1"
           onClick={() => setShowKey((v) => !v)}
@@ -283,22 +228,6 @@ export default function KeysPage() {
           {showKey ? "Hide" : "Show"}
         </button>
       </div>
-
-      {/* Hướng dẫn tạo kết nối live stream */}
-      <Alert className="bg-blue-500/10 border-blue-400/30 text-white">
-        <AlertTitle>Hướng dẫn sử dụng</AlertTitle>
-        <AlertDescription className="space-y-2 mt-2">
-          <p>
-            1. Nhấn <strong>"Generate Connection"</strong> để tạo Server URL và
-            Stream Key
-          </p>
-          <p>2. Cấu hình OBS/Streamlabs với thông tin trên</p>
-          <p>
-            3. Nhấn <strong>"Start Stream"</strong> để tạo phòng live
-          </p>
-          <p>4. Bắt đầu phát từ OBS - viewer có thể xem ngay!</p>
-        </AlertDescription>
-      </Alert>
     </div>
   );
 }
