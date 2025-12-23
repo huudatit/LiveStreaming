@@ -3,6 +3,7 @@ import Stream from "../models/Stream.js";
 import { createRoom, deleteRoom } from "../services/livekitService.js";
 import { RoomServiceClient } from "livekit-server-sdk";
 import { livekitConfig } from "../config/livekit.js";
+import mongoose from "mongoose";
 
 const roomService = new RoomServiceClient(
   livekitConfig.url,
@@ -55,7 +56,6 @@ export const createStream = async (req, res) => {
       title,
       description,
       streamerId: userId,
-      streamer: userId,
       isLive: true,
       status: "live",
       startedAt: new Date(),
@@ -114,20 +114,45 @@ export const getLiveStreams = async (_req, res) => {
   }
 };
 
-// GET /api/streams/me/live  (Private)
+// GET /api/streams/me/live (Private)
 export const meLive = async (req, res) => {
   try {
-    const userId = req.user?._id?.toString();
-    if (!userId) return res.status(401).json({ success: false });
+    const userIdStr = req.user?._id?.toString();
+    if (!userIdStr) return res.status(401).json({ success: false });
 
-    const rooms = await roomService.listRooms({ names: [userId] });
-    const live = rooms.length > 0;
-    return res.json({ success: true, live, room: userId });
+    // 1) Lấy stream mới nhất của user từ DB
+    const streamerId = new mongoose.Types.ObjectId(userIdStr);
+    const stream = await Stream.findOne({ streamerId }).sort({ createdAt: -1 });
+
+    if (!stream) {
+      return res.json({ success: true, live: false });
+    }
+
+    // 2) (Tuỳ chọn) check live thật bằng LiveKit rooms (theo roomName = userId)
+    let live = false;
+    try {
+      const rooms = await roomService.listRooms({ names: [stream.roomName] });
+      live = rooms.length > 0;
+    } catch {
+      // nếu LiveKit timeout, vẫn trả theo DB để UI không chết
+      live = Boolean(stream.isLive) || stream.status === "live";
+    }
+
+    // 3) Trả streamId đúng để frontend gọi GET /api/streams/:id
+    return res.json({
+      success: true,
+      live,
+      streamId: stream._id.toString(),
+      roomName: stream.roomName,
+      isLive: stream.isLive,
+      status: stream.status,
+    });
   } catch (e) {
     console.error("meLive error:", e);
-    return res
-      .status(500)
-      .json({ success: false, message: e?.message || "meLive error" });
+    return res.status(500).json({
+      success: false,
+      message: e?.message || "meLive error",
+    });
   }
 };
 
@@ -140,16 +165,26 @@ export const getStreamById = async (req, res) => {
     const isMongoId = /^[a-f\d]{24}$/i.test(id);
     const query = isMongoId ? { _id: id } : { streamId: id };
 
-    const stream = await Stream.findOne(query).populate(
-      "streamer",
-      "username displayName email"
-    );
+    const stream = await Stream.findOne(query)
+      .populate(
+        "streamerId",
+        "username displayName avatar"
+      )
+      .lean();
+
     if (!stream)
       return res
         .status(404)
         .json({ success: false, message: "Không tìm thấy buổi stream" });
-
-    res.status(200).json({ success: true, stream });
+    
+    res.status(200).json({
+      success: true,
+      stream: {
+        ...stream,
+        streamer: stream.streamerId, 
+        room: stream.roomName,
+      },
+    });
   } catch (error) {
     console.error("Lỗi khi lấy thông tin stream:", error);
     res

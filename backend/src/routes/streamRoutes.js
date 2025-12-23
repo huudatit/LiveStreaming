@@ -21,7 +21,7 @@ router.post("/:id/end", protectedRoute, endStream);
 // Danh sách stream đang live
 router.get("/live", getLiveStreams);
 
-router.get("/me/live", /*protectedRoute*/ meLive);
+router.get("/me/live", protectedRoute, meLive);
 
 // Xem chi tiết stream
 router.get("/:id", getStreamById);

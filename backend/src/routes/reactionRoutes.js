@@ -1,6 +1,6 @@
 import express from "express";
 import Reaction from "../models/Reaction.js";
-import Stream from "../models/Stream.js";
+import mongoose from "mongoose";
 
 const router = express.Router();
 
@@ -9,36 +9,35 @@ router.get("/stats/:streamId", async (req, res) => {
   try {
     const { streamId } = req.params;
 
-    // Aggregate reactions by emoji
+    if (!mongoose.isValidObjectId(streamId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid streamId",
+      });
+    }
+
+    const sid = new mongoose.Types.ObjectId(streamId);
+
     const stats = await Reaction.aggregate([
-      {
-        $match: { streamId: mongoose.Types.ObjectId(streamId) },
-      },
-      {
-        $group: {
-          _id: "$emoji",
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $sort: { count: -1 },
-      },
+      { $match: { streamId: sid } },
+      { $group: { _id: "$emoji", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
     ]);
 
     const total = stats.reduce((sum, item) => sum + item.count, 0);
 
-    res.json({
+    return res.json({
       success: true,
       total,
       reactions: stats.map((s) => ({
         emoji: s._id,
         count: s.count,
-        percentage: total > 0 ? ((s.count / total) * 100).toFixed(1) : 0,
+        percentage: total > 0 ? ((s.count / total) * 100).toFixed(1) : "0.0",
       })),
     });
   } catch (error) {
     console.error("Error fetching reaction stats:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch reaction statistics",
     });
@@ -49,21 +48,27 @@ router.get("/stats/:streamId", async (req, res) => {
 router.get("/recent/:streamId", async (req, res) => {
   try {
     const { streamId } = req.params;
-    const limit = parseInt(req.query.limit) || 50;
+    const limit = Number.parseInt(String(req.query.limit ?? "50"), 10) || 50;
 
-    const reactions = await Reaction.find({ streamId })
+    if (!mongoose.isValidObjectId(streamId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid streamId",
+      });
+    }
+
+    const sid = new mongoose.Types.ObjectId(streamId);
+
+    const reactions = await Reaction.find({ streamId: sid })
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate("userId", "username displayName avatar")
       .lean();
 
-    res.json({
-      success: true,
-      reactions,
-    });
+    return res.json({ success: true, reactions });
   } catch (error) {
     console.error("Error fetching recent reactions:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch recent reactions",
     });

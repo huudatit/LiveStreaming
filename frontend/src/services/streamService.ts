@@ -1,9 +1,15 @@
 import { api } from "@/lib/axios";
+import type { Stream } from "@/types/stream";
 import type { Vod } from "@/types/vod";
 
 export async function fetchLiveStreams() {
   const res = await api.get("/streams/live");
   return res.data.items || [];
+}
+
+export async function fetchStreamDetail(idOrStreamId: string): Promise<Stream> {
+  const { data } = await api.get(`/streams/${idOrStreamId}`);
+  return data.stream as Stream;
 }
 
 export async function fetchViewerToken(room: string, identity: string) {

@@ -15,7 +15,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { fetchViewerToken } from "@/services/streamService";
+import { fetchStreamDetail, fetchViewerToken } from "@/services/streamService";
 import ReactionButtons from "@/components/stream/ReactionButtons";
 import { useStreamStore } from "@/stores/useStreamStore";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -27,6 +27,69 @@ import continueIcon from "@/assets/continue.png";
 import muteIcon from "@/assets/mute.png";
 import soundIcon from "@/assets/sound.png";
 import ReactionOverlay from "@/components/stream/ReactionOverlay";
+import type { Stream } from "@/types/stream";
+
+function Header({ stream }: { stream: Stream | null }) {
+  const streamer =
+    stream && typeof stream.streamer !== "string" ? stream.streamer : null;
+
+  const channelName = streamer?.displayName || streamer?.username || "Channel";
+   
+  const avatarUrl = streamer?.avatarUrl;
+
+  console.log("streamer", stream?.streamer);
+  console.log("streamerId", stream?.streamId);
+
+
+  return (
+    <div className="space-y-3">
+      <h1 className="text-xl lg:text-2xl font-semibold leading-snug">
+        {stream?.title ?? "Livestream"}
+      </h1>
+
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-10 w-10 rounded-full bg-white/10 overflow-hidden shrink-0">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={channelName}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="h-full w-full grid place-items-center text-xs text-slate-300">
+                {channelName.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+          </div>
+
+          <div className="min-w-0">
+            <p className="font-medium truncate">{channelName}</p>
+            <p className="text-xs text-slate-400 truncate">
+              {streamer?.following ?? 0} Subcribers •{" "}
+              {stream?.isLive ? "Đang LIVE" : stream?.status}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button className="px-4 py-2 rounded-xl bg-white text-black font-medium hover:bg-white/90 transition">
+            Đăng ký
+          </button>
+          <button className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10">
+            Chia sẻ
+          </button>
+        </div>
+      </div>
+
+      {stream?.description ? (
+        <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-sm text-slate-200 whitespace-pre-wrap">
+          {stream.description}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function StreamView({
   reactions,
@@ -86,12 +149,10 @@ function StreamView({
     );
   };
 
-  const settings =
+  const settings =  (
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      videoTrackRef?.publication?.track as any
-    )?.mediaStreamTrack?.getSettings?.();
+    videoTrackRef?.publication?.track as any
+  )?.mediaStreamTrack?.getSettings?.();
 
   console.log("Current video settings:", settings);
 
@@ -234,6 +295,8 @@ export default function ViewerPage() {
   const [ready, setReady] = useState(false);
   const serverUrl = import.meta.env.VITE_LIVEKIT_URL as string;
 
+  const [streamDetail, setStreamDetail] = useState<Stream | null>(null);
+
   // Tạo identity chỉ 1 lần cho toàn bộ vòng đời component (ưu tiên lấy từ sessionStorage)
   const [identity] = useState(() => {
     const saved = sessionStorage.getItem("viewer_identity");
@@ -264,6 +327,19 @@ export default function ViewerPage() {
       }
     })();
   }, [room, identity]);
+
+  // Lấy thông tin buổi Stream
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await fetchStreamDetail(room);
+        setStreamDetail(s);
+      } catch (e) {
+        console.warn("fetchStreamDetail failed", e);
+        setStreamDetail(null);
+      }
+    })();
+  }, [room]);
 
   // Hiển thị lỗi nếu có
   if (err)
@@ -322,6 +398,9 @@ export default function ViewerPage() {
           >
             <StreamView reactions={reactions} />
           </LiveKitRoom>
+
+          <Header stream={streamDetail} />
+
         </div>
 
         {/* Khu vực chat: đặt ở cột bên phải */}
