@@ -23,7 +23,7 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "livekit-client": "^2.15.14",
-    "livekit-server-sdk": "^2.14.0",
+    "livekit-server-sdk": "^2.15.0",
     "mongoose": "^8.19.1",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",

@@ -138,7 +138,12 @@ export const createIngress = async (req, res) => {
       participantIdentity: String(userId),
       participantName: user.displayName,
       audio: { preset: IngressAudioEncodingPreset.OPUS_STEREO_96K },
-      video: { preset: IngressVideoEncodingPreset.H264_1080P_30FPS_3_LAYERS },
+      video: {
+        encodingOptions: {
+          case: "preset",
+          value: IngressVideoEncodingPreset.H264_1080P_30FPS_3_LAYERS,
+        },
+      },
     });
 
     if (!ingress?.url || !ingress?.streamKey)

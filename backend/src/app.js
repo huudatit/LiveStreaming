@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { errorHandler } from "./middleware/errorMiddleware.js";
+import livekitWebhookRoutes from "./routes/livekitWebhookRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import streamRoutes from "./routes/streamRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -25,6 +26,8 @@ app.use(
     credentials: true,
   })
 );
+
+app.use("/api/livekit", livekitWebhookRoutes);
 
 app.use(express.json());
 app.use(cookieParser());
