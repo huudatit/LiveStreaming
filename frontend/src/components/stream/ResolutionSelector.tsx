@@ -15,21 +15,21 @@ export default function ResolutionSelector({ track }: ResolutionSelectorProps) {
   );
 
   useEffect(() => {
-    if (!track) return;
+    // Chỉ xử lý nếu track tồn tại và là RemoteTrackPublication
+    // (Local track không chỉnh được chất lượng nhận về)
+    if (!track || !(track instanceof RemoteTrackPublication)) return;
 
-    const videoTrack = track.videoTrack;
-
-    // 🟢 Bước 1: chỉ xử lý nếu đây là RemoteVideoTrack
-    if (!(videoTrack instanceof RemoteVideoTrack)) return;
-
-    // 🟢 Bước 2: xử lý logic chọn độ phân giải
     if (quality === "auto") {
-      // Cho phép LiveKit tự động chọn layer
-      videoTrack.setPreferredVideoQuality(VideoQuality.HIGH);
+      // Tự động
+      track.setVideoQuality(VideoQuality.HIGH);
     } else {
-      // ép chọn tầng cụ thể (0,1,2)
-      const layer = quality === "low" ? 0 : quality === "medium" ? 1 : 2;
-      videoTrack.setPreferredLayer(layer);
+      // Map string sang Enum VideoQuality
+      let q = VideoQuality.HIGH;
+      if (quality === "low") q = VideoQuality.LOW;
+      if (quality === "medium") q = VideoQuality.MEDIUM;
+      
+      // Gọi hàm trên Publication (track)
+      track.setVideoQuality(q);
     }
   }, [quality, track]);
 
@@ -40,7 +40,7 @@ export default function ResolutionSelector({ track }: ResolutionSelectorProps) {
         onChange={(e) =>
           setQuality(e.target.value as "auto" | "low" | "medium" | "high")
         }
-        className="bg-transparent text-white outline-none"
+        className="bg-transparent hover:bg-purple-600 text-white outline-none cursor-pointer"
       >
         <option value="auto">Tự động</option>
         <option value="low">480p</option>
