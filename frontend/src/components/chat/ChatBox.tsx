@@ -19,13 +19,13 @@ export default function ChatBox({
   roomName?: string;
 }) {
   const { user } = useAuthStore();
-  const username =
-    user?.username || `viewer_${Math.floor(Math.random() * 1000)}`;
+  const displayName =
+    user?.displayName || `viewer_${Math.floor(Math.random() * 1000)}`;
 
   const actualRoomName = roomName || streamId;
   const { messages, sendChat } = useStreamStore(
     actualRoomName,
-    username,
+    displayName,
     user?._id
   );
 
@@ -42,7 +42,7 @@ export default function ChatBox({
     <Card className="flex flex-col h-[625px] bg-[#0b0f1a]/80 border-white/10 text-slate-200 backdrop-blur-md">
       <CardHeader className="pb-2">
         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-          💬 Chat 
+          💬 Chat
         </h2>
       </CardHeader>
 
@@ -57,7 +57,7 @@ export default function ChatBox({
             messages.map((m, i) => (
               <div key={i} className="text-sm leading-snug">
                 <span className="font-semibold text-purple-400">
-                  {m.username}
+                  {m.displayName}
                 </span>
                 <span className="text-slate-300">: {m.message}</span>
               </div>

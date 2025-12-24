@@ -28,18 +28,83 @@ import muteIcon from "@/assets/mute.png";
 import soundIcon from "@/assets/sound.png";
 import ReactionOverlay from "@/components/stream/ReactionOverlay";
 import type { Stream } from "@/types/stream";
+import { api } from "@/lib/axios";
 
 function Header({ stream }: { stream: Stream | null }) {
+  const { user: currentUser } = useAuthStore();
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+
   const streamer =
     stream && typeof stream.streamer !== "string" ? stream.streamer : null;
 
-  const channelName = streamer?.displayName || streamer?.username || "Channel";
-   
+  const channelName = streamer?.displayName || "Channel";
   const avatarUrl = streamer?.avatarUrl;
+  const streamerId =
+    typeof stream?.streamer === "string" ? stream.streamer : streamer?._id;
 
-  console.log("streamer", stream?.streamer);
-  console.log("streamerId", stream?.streamId);
+  // Lấy số lượng followers và kiểm tra trạng thái follow
+  useEffect(() => {
+    const checkFollowStatus = async () => {
+      if (!streamerId || !currentUser) return;
 
+      try {
+        const { data } = await api.get(`/users/${streamerId}/is-following`);
+        setIsFollowing(data.isFollowing);
+      } catch (error) {
+        console.error("Error checking follow status:", error);
+      }
+    };
+
+    const getFollowersCount = async () => {
+      if (!streamer?.username) return;
+
+      try {
+        const { data } = await api.get(`/users/${streamer.username}`);
+        setFollowersCount(
+          data.user.followersCount || streamer.followers?.length || 0
+        );
+      } catch (error) {
+        console.error("Error getting followers count:", error);
+        setFollowersCount(streamer.followers?.length || 0);
+      }
+    };
+
+    checkFollowStatus();
+    getFollowersCount();
+  }, [streamerId, currentUser, streamer]);
+
+  // Xử lý follow/unfollow
+  const handleFollow = async () => {
+    if (!currentUser) {
+      toast.error("Vui lòng đăng nhập để theo dõi");
+      return;
+    }
+
+    if (!streamerId) {
+      toast.error("Không tìm thấy thông tin streamer");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { data } = await api.post(`/users/${streamerId}/follow`);
+
+      setIsFollowing(data.isFollowing);
+      setFollowersCount(data.followersCount);
+
+      toast.success(data.message);
+
+      // Dispatch custom event để Sidebar reload danh sách following
+      window.dispatchEvent(new CustomEvent("followingUpdated"));
+    } catch (error) {
+      console.error("Error following user:", error);
+      toast.error("Không thể thực hiện hành động");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -49,6 +114,7 @@ function Header({ stream }: { stream: Stream | null }) {
 
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
+          {/* Avatar */}
           <div className="h-10 w-10 rounded-full bg-white/10 overflow-hidden shrink-0">
             {avatarUrl ? (
               <img
@@ -57,36 +123,74 @@ function Header({ stream }: { stream: Stream | null }) {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className="h-full w-full grid place-items-center text-xs text-slate-300">
+              <div className="h-full w-full grid place-items-center text-xs text-slate-300 font-semibold">
                 {channelName.slice(0, 2).toUpperCase()}
               </div>
             )}
           </div>
 
+          {/* Channel Info */}
           <div className="min-w-0">
             <p className="font-medium truncate">{channelName}</p>
             <p className="text-xs text-slate-400 truncate">
-              {streamer?.following ?? 0} Subcribers •{" "}
+              {followersCount.toLocaleString()} người theo dõi •{" "}
               {stream?.isLive ? "Đang LIVE" : stream?.status}
             </p>
           </div>
         </div>
 
+        {/* Follow Button & Share */}
         <div className="flex items-center gap-2">
-          <button className="px-4 py-2 rounded-xl bg-white text-black font-medium hover:bg-white/90 transition">
-            Đăng ký
-          </button>
-          <button className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10">
-            Chia sẻ
-          </button>
+          {/* Chỉ hiển thị nút Follow nếu không phải là streamer của chính mình */}
+          {currentUser?._id !== streamerId && (
+            <Button
+              onClick={handleFollow}
+              disabled={loading}
+              className={`rounded-full px-6 font-medium transition ${
+                isFollowing
+                  ? "bg-white/10 hover:bg-white/20 text-white"
+                  : "bg-white text-black hover:bg-white/90"
+              }`}
+              size="default"
+            >
+              {loading ? "..." : isFollowing ? "Đã theo dõi" : "Theo dõi"}
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            size="icon"
+            className="rounded-full bg-white/10 hover:bg-white/15 border-white/10"
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.href);
+              toast.success("Đã sao chép link!");
+            }}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" x2="12" y1="2" y2="15" />
+            </svg>
+          </Button>
         </div>
       </div>
 
-      {stream?.description ? (
+      {/* Description */}
+      {stream?.description && (
         <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-sm text-slate-200 whitespace-pre-wrap">
           {stream.description}
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -149,10 +253,11 @@ function StreamView({
     );
   };
 
-  const settings =  (
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    videoTrackRef?.publication?.track as any
-  )?.mediaStreamTrack?.getSettings?.();
+  const settings =
+    (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      videoTrackRef?.publication?.track as any
+    )?.mediaStreamTrack?.getSettings?.();
 
   console.log("Current video settings:", settings);
 
@@ -268,10 +373,9 @@ function StreamView({
                 <SelectValue placeholder="Quality" />
               </SelectTrigger>
               <SelectContent className="bg-[#0b0f1a]/95 border-white/10 text-white backdrop-blur">
-                <SelectItem value={String(0)}>360P</SelectItem>
-                <SelectItem value={String(1)}>480P</SelectItem>
-                <SelectItem value={String(2)}>720P</SelectItem>
-                {/* <SelectItem value={String(3)}>1080P</SelectItem> */}
+                <SelectItem value={String(0)}>480P</SelectItem>
+                <SelectItem value={String(1)}>720P</SelectItem>
+                <SelectItem value={String(2)}>1080P</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -285,10 +389,10 @@ export default function ViewerPage() {
   const params = useParams();
   const room = params.room ?? params.streamId ?? "";
   const { user } = useAuthStore();
-  const username = user?.username || "guest";
+  const displayName = user?.displayName || "guest";
 
   // Lưu ý: sử dụng room (streamId) cho state realtime (reactions/chat) để đồng bộ
-  const { reactions } = useStreamStore(room, username, user?._id);
+  const { reactions } = useStreamStore(room, displayName, user?._id);
 
   const [token, setToken] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -299,21 +403,16 @@ export default function ViewerPage() {
 
   // Tạo identity chỉ 1 lần cho toàn bộ vòng đời component (ưu tiên lấy từ sessionStorage)
   const [identity] = useState(() => {
-    const saved = sessionStorage.getItem("viewer_identity");
+    const uid = user?._id ?? "guest";
+    const rn = streamDetail?.room ?? "pending";
+    const key = `viewer_identity_${uid}_${rn}`;
+    const saved = sessionStorage.getItem(key);
     if (saved) return saved;
 
-    const newId =
-      user?.username || `viewer_${Math.floor(Math.random() * 10000)}`;
-    sessionStorage.setItem("viewer_identity", newId);
+    const newId = `viewer_${uid}_${crypto.randomUUID()}`;
+    sessionStorage.setItem(key, newId);
     return newId;
   });
-
-  // Log debug (có thể xóa khi production)
-  useEffect(() => {
-    console.log("🎬 ViewerPage mounted with room:", room);
-    console.log("👤 Username:", username);
-    console.log("🎉 Reactions state:", reactions);
-  }, [room, username, reactions]);
 
   // Lấy token để viewer join vào phòng LiveKit
   useEffect(() => {
@@ -356,8 +455,11 @@ export default function ViewerPage() {
         Đang tải stream…
       </div>
     );
+  
 
-  // Màn hình “sẵn sàng xem” để yêu cầu người dùng bấm nút (tránh autoplay audio bị chặn)
+
+
+  // Màn hình "sẵn sàng xem" để yêu cầu người dùng bấm nút (tránh autoplay audio bị chặn)
   if (!ready) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#0b0f1a] text-white">
@@ -391,7 +493,7 @@ export default function ViewerPage() {
             audio={false}
             video={false}
             options={{
-              adaptiveStream: false,
+              adaptiveStream: true,
               dynacast: true,
             }}
             onConnected={() => toast.success("Đã kết nối tới LiveKit!")}
@@ -400,7 +502,6 @@ export default function ViewerPage() {
           </LiveKitRoom>
 
           <Header stream={streamDetail} />
-
         </div>
 
         {/* Khu vực chat: đặt ở cột bên phải */}

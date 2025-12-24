@@ -5,6 +5,17 @@ const streamSchema = new mongoose.Schema(
     ingressId: { type: String },
     streamKey: { type: String },
     serverUrl: { type: String },
+    username: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    displayName: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
     roomName: {
       type: String,
       required: true,
