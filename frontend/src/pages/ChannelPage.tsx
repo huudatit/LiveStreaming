@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { userService } from "@/services/userService";
 import { api } from "@/lib/axios";
 import type { User } from "@/types/user";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 export default function ChannelPage() {
   const { username } = useParams<{ username: string }>();
   const { user: currentUser } = useAuthStore();
+  const navigate = useNavigate();
   const [channelUser, setChannelUser] = useState<User | null>(null);
   const [vods, setVods] = useState<Vod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,10 @@ export default function ChannelPage() {
   const handleFollow = async () => {
     if (!channelUser || !currentUser) {
       toast.error("Vui lòng đăng nhập để theo dõi kênh");
+      // Redirect to sign-in page after 1 second
+      setTimeout(() => {
+        navigate("/signin");
+      }, 1000);
       return;
     }
 
