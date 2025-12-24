@@ -6,8 +6,19 @@ const activeRooms = new Map(); // roomName -> Set of socket.id
 const userSockets = new Map(); // socket.id -> user info
 
 export const initSocketService = (io) => {
+  global.io = io;
+
   io.on("connection", (socket) => {
     console.log("🔌 User connected:", socket.id);
+
+    // Register for notifications (join user-specific room)
+    socket.on("register-notifications", ({ userId }) => {
+      if (userId) {
+        const userRoom = `user_${userId}`;
+        socket.join(userRoom);
+        console.log(`📱 User ${userId} registered for notifications`);
+      }
+    });
 
     // Join stream room
     socket.on("join-stream", async ({ roomName, displayName, userId }) => {
@@ -172,6 +183,31 @@ export const initSocketService = (io) => {
             console.log(
               `${emoji} Saved reaction from ${displayName} in ${roomName}`
             );
+
+            // 🆕 Emit updated reaction stats to the room (for Dashboard)
+            try {
+              const stats = await Reaction.aggregate([
+                { $match: { streamId: stream._id } },
+                { $group: { _id: "$emoji", count: { $sum: 1 } } },
+                { $sort: { count: -1 } },
+              ]);
+
+              const total = stats.reduce((sum, s) => sum + s.count, 0);
+              const reactions = stats.map((s) => ({
+                emoji: s._id,
+                count: s.count,
+                percentage: total > 0 ? ((s.count / total) * 100).toFixed(1) : "0",
+              }));
+
+              io.to(roomName).emit("reaction-stats-updated", {
+                streamId: stream._id.toString(),
+                reactions,
+                total,
+              });
+              console.log(`📊 Emitted reaction stats update to ${roomName}`);
+            } catch (statsError) {
+              console.warn("⚠️ Failed to emit reaction stats:", statsError.message);
+            }
           }
         } catch (dbError) {
           console.warn("⚠️ Failed to save reaction to DB:", dbError.message);

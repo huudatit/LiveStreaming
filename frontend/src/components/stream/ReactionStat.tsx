@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/axios";
+import { socket } from "@/services/socket";
 
 interface ReactionStat {
   emoji: string;
@@ -33,9 +34,29 @@ export default function ReactionStats({ streamId }: ReactionStatsProps) {
 
     fetchStats();
 
-    // Refresh every 30 seconds
+    // 🆕 Listen for real-time reaction stats updates via Socket.IO
+    const handleReactionStatsUpdate = (data: {
+      streamId: string;
+      reactions: ReactionStat[];
+      total: number;
+    }) => {
+      // Only update if it's for this stream
+      if (data.streamId === streamId) {
+        console.log("📊 Reaction stats updated in real-time:", data);
+        setStats(data.reactions);
+        setTotal(data.total);
+      }
+    };
+
+    socket.on("reaction-stats-updated", handleReactionStatsUpdate);
+
+    // Refresh every 30 seconds as fallback
     const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
+    
+    return () => {
+      clearInterval(interval);
+      socket.off("reaction-stats-updated", handleReactionStatsUpdate);
+    };
   }, [streamId]);
 
   if (loading) {
