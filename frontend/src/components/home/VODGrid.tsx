@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "react-router-dom";
-import type { VOD } from "@/types/stream";
+import type { Vod } from "@/types/vod";
 import { Eye, Clock } from "lucide-react";
 
 function formatDuration(seconds?: number) {
@@ -17,7 +17,7 @@ function formatDuration(seconds?: number) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-export default function VODGrid({ items }: { items: VOD[] }) {
+export default function VODGrid({ items }: { items: Vod[] }) {
   if (!items?.length) {
     return (
       <p className="text-slate-400">
