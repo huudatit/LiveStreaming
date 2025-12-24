@@ -3,6 +3,7 @@ export interface ChatMessage {
   stream: string; // Stream ID
   user: string; // User ID
   username: string;
+  displayName: string;
   message: string;
   timestamp: string; // ISO
 };

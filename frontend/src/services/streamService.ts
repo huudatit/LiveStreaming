@@ -7,8 +7,8 @@ export async function fetchLiveStreams() {
   return res.data.items || [];
 }
 
-export async function fetchStreamDetail(idOrStreamId: string): Promise<Stream> {
-  const { data } = await api.get(`/streams/${idOrStreamId}`);
+export async function fetchStreamDetail(streamId: string): Promise<Stream> {
+  const { data } = await api.get(`/streams/${streamId}`);
   return data.stream as Stream;
 }
 

@@ -16,8 +16,8 @@ const REACTIONS = [
 
 export default function ReactionButtons({ roomName }: ReactionButtonsProps) {
   const { user } = useAuthStore();
-  const username = user?.username || "guest";
-  const { sendReaction } = useStreamStore(roomName, username, user?._id);
+  const displayName = user?.displayName || "guest";
+  const { sendReaction } = useStreamStore(roomName, displayName, user?._id);
 
   const handleReaction = (emoji: string) => {
     sendReaction(emoji);

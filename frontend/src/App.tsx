@@ -11,6 +11,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import KeysPage from "@/pages/KeysPage";
 import ViewerPage from "@/pages/ViewerPage";
 import VODPlayerPage from "./pages/VODPlayerPage";
+import SettingsPage from "./pages/SettingPage";
 // import VODPlayerPage from "@/pages/VODPlayerPage";
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/keys" element={<KeysPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/watch/:streamId" element={<ViewerPage />} />
           <Route path="/vod/:vodId" element={<VODPlayerPage />} />
         </Route>

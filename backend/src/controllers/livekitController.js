@@ -114,7 +114,7 @@ async function resetAllIngresses() {
 export const createIngress = async (req, res) => {
   try {
     console.log("📩 req.body:", req.body);
-    const { userId, type, roomName } = req.body;
+    const { userId, displayName, type, roomName } = req.body;
 
     if (!userId)
       return res.status(400).json({ success: false, message: "Thiếu userId" });
@@ -124,7 +124,7 @@ export const createIngress = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Không tìm thấy user" });
-
+    
     // Xóa TẤT CẢ ingress cũ trên account
     await resetAllIngresses();
 
@@ -133,10 +133,10 @@ export const createIngress = async (req, res) => {
 
     console.log("🔄 Creating new ingress...");
     const ingress = await ingressClient.createIngress(inputType, {
-      name: user.username,
+      name: displayName,
       roomName: String(roomName || userId),
       participantIdentity: String(userId),
-      participantName: user.displayName,
+      participantName: displayName,
       audio: { preset: IngressAudioEncodingPreset.OPUS_STEREO_96K },
       video: {
         encodingOptions: {
@@ -155,8 +155,10 @@ export const createIngress = async (req, res) => {
     let stream = await Stream.findOne({ streamerId: userId });
     if (!stream) {
       stream = new Stream({
+        username: user.username,
+        displayName: displayName,
         roomName: userId.toString(),
-        title: `${user.displayName}'s Stream`,
+        title: `${displayName}'s Stream`,
         streamerId: userId,
         isLive: false,
         status: "preparing",
@@ -175,8 +177,8 @@ export const createIngress = async (req, res) => {
         ingressId: ingress.ingressId,
         streamUrl: ingress.url,
         streamKey: ingress.streamKey,
-        roomName: userId,
-        participant: user.username,
+        roomName: ingress.ingressId,
+        participant: displayName,
       },
     });
   } catch (err) {

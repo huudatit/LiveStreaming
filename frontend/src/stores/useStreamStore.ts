@@ -3,12 +3,14 @@ import { socket } from "@/services/socket";
 
 export function useStreamStore(
   roomName: string,
-  username: string,
+  displayName: string,
   userId?: string
 ) {
   const [viewerCount, setViewerCount] = useState(0);
   const [messages, setMessages] = useState<
-    { username: string; message: string; timestamp?: string }[]
+    {
+      displayName: string; message: string; timestamp?: string 
+}[]
   >([]);
   const [reactions, setReactions] = useState<
     { id: string; emoji: string; x: number; delay: number }[]
@@ -19,14 +21,14 @@ export function useStreamStore(
   const currentRoomRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!roomName || !username) {
-      console.warn("⚠️ Missing roomName or username");
+    if (!roomName || !displayName) {
+      console.warn("⚠️ Missing roomName or displayName");
       return;
     }
 
     console.log("🎯 Setting up useStreamStore for:", {
       roomName,
-      username,
+      displayName,
       userId,
     });
 
@@ -44,7 +46,7 @@ export function useStreamStore(
 
     // Join new room
     console.log("🚪 Joining room:", roomName);
-    socket.emit("join-stream", { roomName, username, userId });
+    socket.emit("join-stream", { roomName, displayName, userId });
     hasJoinedRef.current = true;
     currentRoomRef.current = roomName;
 
@@ -58,7 +60,7 @@ export function useStreamStore(
       console.log("📢 System message:", m.message);
       setMessages((prev) => [
         ...prev,
-        { username: "System", message: m.message },
+        { displayName: "System", message: m.message },
       ]);
     };
 
@@ -121,15 +123,15 @@ export function useStreamStore(
       socket.off("chat-message", handleChatMessage);
       socket.off("new-reaction", handleNewReaction);
     };
-  }, [roomName, username, userId]);
+  }, [roomName, displayName, userId]);
 
   const sendChat = (message: string, streamId?: string) => {
     if (message.trim()) {
-      console.log("📤 Sending chat:", { roomName, username, userId, streamId });
+      console.log("📤 Sending chat:", { roomName, displayName, userId, streamId });
       socket.emit("chat-message", {
         roomName,
         message,
-        username,
+        displayName,
         userId,
         streamId,
       });
@@ -137,8 +139,8 @@ export function useStreamStore(
   };
 
   const sendReaction = (emoji: string) => {
-    console.log("📤 Sending reaction:", { roomName, emoji, username });
-    socket.emit("send-reaction", { roomName, emoji, username });
+    console.log("📤 Sending reaction:", { roomName, emoji, displayName });
+    socket.emit("send-reaction", { roomName, emoji, displayName });
   };
 
   return { viewerCount, messages, sendChat, sendReaction, reactions };

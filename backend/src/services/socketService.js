@@ -10,7 +10,7 @@ export const initSocketService = (io) => {
     console.log("🔌 User connected:", socket.id);
 
     // Join stream room
-    socket.on("join-stream", async ({ roomName, username, userId }) => {
+    socket.on("join-stream", async ({ roomName, displayName, userId }) => {
       try {
         // Clean up any previous rooms this socket was in
         const previousUserInfo = userSockets.get(socket.id);
@@ -24,7 +24,7 @@ export const initSocketService = (io) => {
           const existingSocket = Array.from(viewers).find((id) => {
             const info = userSockets.get(id);
             return (
-              info?.username === username &&
+              info?.displayName === displayName &&
               info?.userId === userId &&
               id !== socket.id
             );
@@ -32,7 +32,7 @@ export const initSocketService = (io) => {
 
           if (existingSocket) {
             console.log(
-              `⚠️ ${username} already in ${roomName} with socket ${existingSocket}, removing old socket`
+              `⚠️ ${displayName} already in ${roomName} with socket ${existingSocket}, removing old socket`
             );
             const oldSocket = io.sockets.sockets.get(existingSocket);
             if (oldSocket) {
@@ -44,7 +44,7 @@ export const initSocketService = (io) => {
         }
 
         socket.join(roomName);
-        userSockets.set(socket.id, { roomName, username, userId });
+        userSockets.set(socket.id, { roomName, displayName, userId });
         if (!activeRooms.has(roomName)) activeRooms.set(roomName, new Set());
         activeRooms.get(roomName).add(socket.id);
 
@@ -57,11 +57,11 @@ export const initSocketService = (io) => {
 
         io.to(roomName).emit("viewer-count", { count: viewerCount });
         io.to(roomName).emit("system-message", {
-          message: `${username} joined the stream`,
+          message: `${displayName} joined the stream`,
           timestamp: new Date(),
         });
         console.log(
-          `👤 ${username} joined ${roomName} (${viewerCount} viewers)`
+          `👤 ${displayName} joined ${roomName} (${viewerCount} viewers)`
         );
       } catch (error) {
         console.error("Error joining stream:", error);
@@ -76,11 +76,11 @@ export const initSocketService = (io) => {
     // Send chat message
     socket.on(
       "chat-message",
-      async ({ roomName, message, username, userId, streamId }) => {
+      async ({ roomName, message, displayName, userId, streamId }) => {
         console.log("💬 Chat message received:", {
           roomName,
           message,
-          username,
+          displayName,
           userId,
           streamId,
         });
@@ -89,7 +89,7 @@ export const initSocketService = (io) => {
           if (!userId || !streamId) {
             console.warn(`⚠️ Anonymous message in ${roomName}: "${message}"`);
             io.to(roomName).emit("chat-message", {
-              username,
+              displayName,
               message,
               timestamp: new Date(),
             });
@@ -99,7 +99,7 @@ export const initSocketService = (io) => {
           if (!streamId.match(/^[0-9a-fA-F]{24}$/)) {
             console.error(`❌ Invalid streamId format: ${streamId}`);
             io.to(roomName).emit("chat-message", {
-              username,
+              displayName,
               message,
               timestamp: new Date(),
             });
@@ -109,23 +109,23 @@ export const initSocketService = (io) => {
           const chatMessage = await ChatMessage.create({
             streamId: streamId,
             userId: userId,
-            username,
+            displayName,
             message,
           });
 
           io.to(roomName).emit("chat-message", {
             id: chatMessage._id,
-            username,
+            displayName,
             userId,
             message,
             timestamp: chatMessage.timestamp,
           });
 
-          console.log(`💬 ${username}: ${message}`);
+          console.log(`💬 ${displayName}: ${message}`);
         } catch (error) {
           console.error("❌ Error sending message:", error.message);
           io.to(roomName).emit("chat-message", {
-            username,
+            displayName,
             message,
             timestamp: new Date(),
           });
@@ -134,7 +134,7 @@ export const initSocketService = (io) => {
     );
 
     // Send reaction - IMPROVED VERSION
-    socket.on("send-reaction", async ({ roomName, emoji, username }) => {
+    socket.on("send-reaction", async ({ roomName, emoji, displayName }) => {
       try {
         const userInfo = userSockets.get(socket.id);
         const userId = userInfo?.userId;
@@ -147,7 +147,7 @@ export const initSocketService = (io) => {
 
         const reactionData = {
           emoji,
-          username,
+          displayName,
           x: position.x,
           delay: position.delay,
           id: `${socket.id}-${Date.now()}`,
@@ -165,11 +165,11 @@ export const initSocketService = (io) => {
             await Reaction.create({
               streamId: stream._id,
               userId: userId,
-              username,
+              displayName,
               emoji,
             });
             console.log(
-              `${emoji} Saved reaction from ${username} in ${roomName}`
+              `${emoji} Saved reaction from ${displayName} in ${roomName}`
             );
           }
         } catch (dbError) {
@@ -177,7 +177,7 @@ export const initSocketService = (io) => {
           // Don't throw - reaction was already broadcast
         }
 
-        console.log(`${emoji} ${username} reacted in ${roomName}`);
+        console.log(`${emoji} ${displayName} reacted in ${roomName}`);
       } catch (error) {
         console.error("❌ Error handling reaction:", error);
       }
@@ -189,12 +189,12 @@ export const initSocketService = (io) => {
     });
 
     // Typing indicator
-    socket.on("typing-start", ({ roomName, username }) => {
-      socket.to(roomName).emit("user-typing", { username, isTyping: true });
+    socket.on("typing-start", ({ roomName, displayName }) => {
+      socket.to(roomName).emit("user-typing", { displayName, isTyping: true });
     });
 
-    socket.on("typing-stop", ({ roomName, username }) => {
-      socket.to(roomName).emit("user-typing", { username, isTyping: false });
+    socket.on("typing-stop", ({ roomName, displayName }) => {
+      socket.to(roomName).emit("user-typing", { displayName, isTyping: false });
     });
 
     // Disconnect
@@ -228,9 +228,9 @@ async function handleLeaveRoom(socket, roomName, io) {
 
     io.to(roomName).emit("viewer-count", { count: viewerCount });
 
-    if (userInfo?.username) {
+    if (userInfo?.displayName) {
       io.to(roomName).emit("system-message", {
-        message: `${userInfo.username} left the stream`,
+        message: `${userInfo.displayName} left the stream`,
         timestamp: new Date(),
       });
     }

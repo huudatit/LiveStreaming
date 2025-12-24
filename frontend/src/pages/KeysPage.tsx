@@ -49,12 +49,14 @@ export default function KeysPage() {
         // Log payload gửi lên backend (phục vụ debug)
         console.log("🛰 Payload gửi đi:", {
           userId: user._id,
+          displayName: user.displayName,
           type: ingressType,
         });
 
         // Gọi API tạo ingress theo loại (RTMP/WHIP)
         const res = await api.post("/livekit/ingress", {
           userId: user._id,
+          displayName: user.displayName,
           type: ingressType,
         });
 

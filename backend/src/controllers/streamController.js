@@ -14,10 +14,10 @@ const roomService = new RoomServiceClient(
 // POST /api/streams/create  (Private)
 export const createStream = async (req, res) => {
   try {
-    const { title, description } = req.body;
+    const { title, description = "" } = req.body;
     const userId = req.user._id;
 
-    if (!title) {
+    if (!title?.trim()) {
       return res
         .status(400)
         .json({
@@ -41,6 +41,13 @@ export const createStream = async (req, res) => {
       });
     }
 
+    const user = await User.findById(userId).lean();
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy user" });
+    }
+
     // Tạo roomName duy nhất (không tái sử dụng _id user)
     const roomName = `room_${userId.toString()}_${Date.now()}_${crypto
       .randomBytes(4)
@@ -51,11 +58,12 @@ export const createStream = async (req, res) => {
 
     // Lưu vào Mongo
     const newStream = await Stream.create({
-      streamId: roomName,
       roomName: roomName,
-      title,
+      title: title.trim(),
       description,
       streamerId: userId,
+      username: user.username,
+      displayName: user.displayName,
       isLive: true,
       status: "live",
       startedAt: new Date(),
@@ -163,12 +171,12 @@ export const getStreamById = async (req, res) => {
     const { id } = req.params;
 
     const isMongoId = /^[a-f\d]{24}$/i.test(id);
-    const query = isMongoId ? { _id: id } : { streamId: id };
+    const query = isMongoId ? { _id: id } : { roomName: id };
 
     const stream = await Stream.findOne(query)
       .populate(
         "streamerId",
-        "username displayName avatar"
+        "username displayName avatarUrl followers"
       )
       .lean();
 
