@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState, useRef } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   LiveKitRoom,
   useTracks,
@@ -29,20 +29,35 @@ import soundIcon from "@/assets/sound.png";
 import ReactionOverlay from "@/components/stream/ReactionOverlay";
 import type { Stream } from "@/types/stream";
 import { api } from "@/lib/axios";
+import { socket } from "@/services/socket";
 
-function Header({ stream }: { stream: Stream | null }) {
+interface HeaderProps {
+  stream: Stream | null;
+  onStreamUpdate: (updatedStream: Stream) => void;
+}
+
+function Header({ stream, onStreamUpdate }: HeaderProps) {
   const { user: currentUser } = useAuthStore();
+  const navigate = useNavigate();
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [loading, setLoading] = useState(false);
+
 
   const streamer =
     stream && typeof stream.streamer !== "string" ? stream.streamer : null;
 
   const channelName = streamer?.displayName || "Channel";
   const avatarUrl = streamer?.avatarUrl;
+  
+  // Debug logging
+  console.log("Stream object:", stream);
+  console.log("Streamer:", streamer);
+  
   const streamerId =
-    typeof stream?.streamer === "string" ? stream.streamer : streamer?._id;
+    typeof stream?.streamer === "string" 
+      ? stream.streamer 
+      : (stream?.streamer as any)?._id || (stream?.streamer as any)?.id;
 
   // Lấy số lượng followers và kiểm tra trạng thái follow
   useEffect(() => {
@@ -75,10 +90,49 @@ function Header({ stream }: { stream: Stream | null }) {
     getFollowersCount();
   }, [streamerId, currentUser, streamer]);
 
+  // 🔥 Listen for real-time stream updates via Socket.IO
+  useEffect(() => {
+    if (!stream?.room) return;
+
+    const handleStreamUpdate = (data: {
+      title?: string;
+      description?: string;
+    }) => {
+      console.log("📡 Stream updated:", data);
+
+      // Update local stream state
+      onStreamUpdate({
+        ...stream,
+        title: data.title || stream.title,
+        description: data.description || stream.description,
+      });
+
+      toast.info("Stream đã được cập nhật!");
+    };
+
+    // Import socket từ service
+    import("@/services/socket").then(({ socket }) => {
+      socket.on("stream-updated", handleStreamUpdate);
+    });
+
+    return () => {
+      import("@/services/socket").then(({ socket }) => {
+        socket.off("stream-updated", handleStreamUpdate);
+      });
+    };
+  }, [stream, onStreamUpdate]);
+
+
   // Xử lý follow/unfollow
   const handleFollow = async () => {
+    console.log("handleFollow called", { currentUser, streamerId, loading });
+    
     if (!currentUser) {
       toast.error("Vui lòng đăng nhập để theo dõi");
+      // Redirect to sign-in page after 1 second
+      setTimeout(() => {
+        navigate("/signin");
+      }, 1000);
       return;
     }
 
@@ -107,40 +161,48 @@ function Header({ stream }: { stream: Stream | null }) {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4 bg-white/5 rounded-xl p-4 border border-white/10">
+      {/* Title */}
       <h1 className="text-xl lg:text-2xl font-semibold leading-snug">
         {stream?.title ?? "Livestream"}
       </h1>
 
+      {/* Streamer info row */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           {/* Avatar */}
-          <div className="h-10 w-10 rounded-full bg-white/10 overflow-hidden shrink-0">
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt={channelName}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="h-full w-full grid place-items-center text-xs text-slate-300 font-semibold">
-                {channelName.slice(0, 2).toUpperCase()}
-              </div>
-            )}
+          <div className="h-12 w-12 rounded-full bg-linear-to-br from-purple-500 to-pink-500 p-0.5 shrink-0">
+            <div className="h-full w-full rounded-full overflow-hidden bg-black">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={channelName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="h-full w-full grid place-items-center text-sm text-white font-semibold">
+                  {channelName.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Channel Info */}
           <div className="min-w-0">
-            <p className="font-medium truncate">{channelName}</p>
-            <p className="text-xs text-slate-400 truncate">
-              {followersCount.toLocaleString()} người theo dõi •{" "}
-              {stream?.isLive ? "Đang LIVE" : stream?.status}
-            </p>
+            <p className="font-semibold text-base truncate">{channelName}</p>
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <span>{followersCount.toLocaleString()} người theo dõi</span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                LIVE
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Follow Button & Share */}
-        <div className="flex items-center gap-2">
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 shrink-0">
           {/* Chỉ hiển thị nút Follow nếu không phải là streamer của chính mình */}
           {currentUser?._id !== streamerId && (
             <Button
@@ -157,6 +219,7 @@ function Header({ stream }: { stream: Stream | null }) {
             </Button>
           )}
 
+          {/* Share button */}
           <Button
             variant="outline"
             size="icon"
@@ -185,10 +248,12 @@ function Header({ stream }: { stream: Stream | null }) {
         </div>
       </div>
 
-      {/* Description */}
+      {/* Description (nếu có) */}
       {stream?.description && (
-        <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-sm text-slate-200 whitespace-pre-wrap">
-          {stream.description}
+        <div className="rounded-lg bg-black/20 border border-white/10 p-3">
+          <p className="text-sm text-slate-200 whitespace-pre-wrap">
+            {stream.description}
+          </p>
         </div>
       )}
     </div>
@@ -217,6 +282,11 @@ function StreamView({
   const [paused, setPaused] = useState(false); // pause = unsubscribe cả video+audio
   const [muted, setMuted] = useState(false); // mute = unsubscribe audio
   const [quality, setQuality] = useState<VideoQuality>(VideoQuality.HIGH);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLive, setIsLive] = useState(true); // Track if viewer is at live edge or lagging
+  
+  // Ref to video container for fullscreen
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Helper: subscribe/unsubscribe an toàn
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -261,15 +331,6 @@ function StreamView({
 
   console.log("Current video settings:", settings);
 
-  // Nếu chưa có remote participant nào (streamer chưa publish)
-  if (!participants.length) {
-    return (
-      <div className="aspect-video rounded-xl border border-white/10 grid place-items-center text-white">
-        Đang chờ streamer…
-      </div>
-    );
-  }
-
   const onTogglePause = async () => {
     // Pause = ngừng nhận video + audio
     if (!paused) {
@@ -308,29 +369,142 @@ function StreamView({
     await setQualitySafe(videoPub, q);
   };
 
+  // Go to live (jump to current live position after pause)
+  const onGoLive = async () => {
+    // Unsubscribe and resubscribe to force resync to live position
+    await setSubscribedSafe(videoPub, false);
+    await setSubscribedSafe(audioPub, false);
+    
+    // Small delay to ensure clean disconnect
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Resubscribe to jump to live
+    await setSubscribedSafe(videoPub, true);
+    if (!muted) {
+      await setSubscribedSafe(audioPub, true);
+    }
+    
+    setPaused(false);
+    setIsLive(true); // Now at live edge
+    toast.success("Đã nhảy đến đoạn trực tiếp!");
+  };
+
+  // Toggle fullscreen
+  const onToggleFullscreen = async () => {
+    if (!containerRef.current) return;
+
+    try {
+      if (!document.fullscreenElement) {
+        // Enter fullscreen
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        // Exit fullscreen
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (error) {
+      console.error("Fullscreen error:", error);
+    }
+  };
+
+  // Listen for fullscreen changes (e.g., user presses ESC)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  // Monitor if viewer is at live edge or lagging behind
+  useEffect(() => {
+    if (!videoTrackRef?.publication?.track || paused) {
+      setIsLive(false);
+      return;
+    }
+
+    const checkLiveStatus = () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mediaStreamTrack = (videoTrackRef.publication.track as any)?.mediaStreamTrack;
+        if (!mediaStreamTrack) {
+          setIsLive(false);
+          return;
+        }
+
+        // Get the video element from the track
+        const videoElements = document.querySelectorAll('video');
+        let isAtLiveEdge = true;
+
+        videoElements.forEach((video) => {
+          if (video.srcObject) {
+            const buffered = video.buffered;
+            if (buffered.length > 0) {
+              const currentTime = video.currentTime;
+              const bufferedEnd = buffered.end(buffered.length - 1);
+              const lag = bufferedEnd - currentTime;
+              
+              // If lag is more than 2 seconds, consider it not live
+              if (lag > 2) {
+                isAtLiveEdge = false;
+              }
+            }
+          }
+        });
+
+        setIsLive(isAtLiveEdge);
+      } catch (error) {
+        console.error("Error checking live status:", error);
+        setIsLive(true);
+      }
+    };
+
+    // Check every second
+    const interval = setInterval(checkLiveStatus, 1000);
+    checkLiveStatus(); // Initial check
+
+    return () => clearInterval(interval);
+  }, [videoTrackRef, paused]);
+
   return (
-    <div className="relative aspect-video rounded-xl overflow-hidden bg-black">
-      {/* Video fill full */}
-      {videoTrackRef && (
-        <VideoTrack
-          trackRef={videoTrackRef}
-          className="absolute inset-0 w-full h-full object-contain"
-        />
+    <div 
+      ref={containerRef}
+      className="relative aspect-video rounded-xl overflow-hidden bg-black"
+    >
+      {/* Nếu chưa có remote participant nào (streamer chưa publish) */}
+      {!participants.length ? (
+        <div className="absolute inset-0 grid place-items-center text-white">
+          Đang chờ streamer…
+        </div>
+      ) : (
+        <>
+          {/* Video fill full */}
+          {videoTrackRef && (
+            <VideoTrack
+              trackRef={videoTrackRef}
+              className="absolute inset-0 w-full h-full object-contain"
+            />
+          )}
+
+          {/* Audio (sẽ bị mute/pause bằng setSubscribed) */}
+          <ReactionOverlay reactions={reactions} />
+          {audioTrackRef && <AudioTrack trackRef={audioTrackRef} />}
+
+          {/* LIVE + viewer count */}
+          <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
+            <div className="bg-black/60 px-3 py-1.5 rounded-lg text-sm">
+              <span className="text-red-500">●</span> LIVE
+            </div>
+            <div className="bg-black/60 px-3 py-1.5 rounded-lg text-sm">
+              {participants.length} đang xem
+            </div>
+          </div>
+        </>
       )}
-
-      {/* Audio (sẽ bị mute/pause bằng setSubscribed) */}
-      <ReactionOverlay reactions={reactions} />
-      {audioTrackRef && <AudioTrack trackRef={audioTrackRef} />}
-
-      {/* LIVE + viewer count */}
-      <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
-        <div className="bg-black/60 px-3 py-1.5 rounded-lg text-sm">
-          <span className="text-red-500">●</span> LIVE
-        </div>
-        <div className="bg-black/60 px-3 py-1.5 rounded-lg text-sm">
-          {participants.length} đang xem
-        </div>
-      </div>
 
       {/* Minimal controls */}
       <div className="absolute inset-x-0 bottom-0 z-20 p-3">
@@ -348,14 +522,30 @@ function StreamView({
               />
             </Button>
 
+            {/* Go Live button - always show, red when live, gray when lagging */}
+            <Button
+              onClick={onGoLive}
+              className={`gap-1.5 transition-colors ${
+                isLive 
+                  ? "bg-red-600 hover:bg-red-700 text-white" 
+                  : "bg-white/10 hover:bg-white/20 text-white"
+              }`}
+              variant="secondary"
+              title={isLive ? "Đang theo dõi trực tiếp" : "Nhảy đến đoạn trực tiếp"}
+              disabled={isLive && !paused}
+            >
+              <span className={isLive ? "text-red-200" : "text-gray-400"}>●</span>
+              <span className="text-sm font-medium">LIVE</span>
+            </Button>
+
             <Button
               onClick={onToggleMute}
               className="bg-white/10 hover:bg-white/20"
               variant="secondary"
             >
               <img
-                src={muted ? soundIcon : muteIcon}
-                alt={muted ? "Unmute" : "Mute"}
+                src={muted ? muteIcon : soundIcon}
+                alt={muted ? "Mute" : "Unmute"}
                 className="w-5 h-5"
               />
             </Button>
@@ -378,6 +568,50 @@ function StreamView({
                 <SelectItem value={String(2)}>1080P</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Fullscreen Button */}
+            <Button
+              onClick={onToggleFullscreen}
+              className="bg-white/10 hover:bg-white/20"
+              variant="secondary"
+              title={isFullscreen ? "Thoát toàn màn hình" : "Xem toàn màn hình"}
+            >
+              {isFullscreen ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+                  <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+                  <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+                  <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 7V4a1 1 0 0 1 1-1h3" />
+                  <path d="M17 3h3a1 1 0 0 1 1 1v3" />
+                  <path d="M21 17v3a1 1 0 0 1-1 1h-3" />
+                  <path d="M7 21H4a1 1 0 0 1-1-1v-3" />
+                </svg>
+              )}
+            </Button>
           </div>
         </div>
       </div>
@@ -396,7 +630,7 @@ export default function ViewerPage() {
 
   const [token, setToken] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(true); // Auto-connect without user click
   const serverUrl = import.meta.env.VITE_LIVEKIT_URL as string;
 
   const [streamDetail, setStreamDetail] = useState<Stream | null>(null);
@@ -409,7 +643,7 @@ export default function ViewerPage() {
     const saved = sessionStorage.getItem(key);
     if (saved) return saved;
 
-    const newId = `viewer_${uid}_${crypto.randomUUID()}`;
+    const newId = `guest_${uid}_${crypto.randomUUID()}`;
     sessionStorage.setItem(key, newId);
     return newId;
   });
@@ -435,10 +669,30 @@ export default function ViewerPage() {
         setStreamDetail(s);
       } catch (e) {
         console.warn("fetchStreamDetail failed", e);
-        setStreamDetail(null);
+        // Only setmDetail to null on initial load, not on refresh
+        if (!streamDetail) {
+          setStreamDetail(null);
+        }
       }
     })();
-  }, [room]);
+  }, [room]); // Remove streamDetail from dependencies to avoid reset
+
+  // Join socket room để nhận real-time updates
+  useEffect(() => {
+    if (!room || !displayName) return;
+
+    console.log("🔌 Joining socket room:", room);
+    socket.emit("join-stream", {
+      roomName: room,
+      displayName,
+      userId: user?._id,
+    });
+
+    return () => {
+      console.log("🔌 Leaving socket room:", room);
+      socket.emit("leave-stream", { roomName: room });
+    };
+  }, [room, displayName, user?._id]);
 
   // Hiển thị lỗi nếu có
   if (err)
@@ -457,29 +711,27 @@ export default function ViewerPage() {
     );
   
 
-
-
-  // Màn hình "sẵn sàng xem" để yêu cầu người dùng bấm nút (tránh autoplay audio bị chặn)
-  if (!ready) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0b0f1a] text-white">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold mb-4">
-            🎬 Sẵn sàng xem livestream
-          </h1>
-          <p className="text-slate-400 mb-6">
-            Nhấn nút bên dưới để bắt đầu và bật âm thanh.
-          </p>
-          <button
-            onClick={() => setReady(true)}
-            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl font-medium text-white transition"
-          >
-            Bắt đầu xem 🔊
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // // Màn hình "sẵn sàng xem" để yêu cầu người dùng bấm nút (tránh autoplay audio bị chặn)
+  // if (!ready) {
+  //   return (
+  //     <div className="min-h-screen flex flex-col items-center justify-center bg-[#0b0f1a] text-white">
+  //       <div className="text-center">
+  //         <h1 className="text-2xl font-semibold mb-4">
+  //           🎬 Sẵn sàng xem livestream
+  //         </h1>
+  //         <p className="text-slate-400 mb-6">
+  //           Nhấn nút bên dưới để bắt đầu và bật âm thanh.
+  //         </p>
+  //         <button
+  //           onClick={() => setReady(true)}
+  //           className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-xl font-medium text-white transition"
+  //         >
+  //           Bắt đầu xem 🔊
+  //         </button>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white p-4">
@@ -500,8 +752,9 @@ export default function ViewerPage() {
           >
             <StreamView reactions={reactions} />
           </LiveKitRoom>
-
-          <Header stream={streamDetail} />
+          <div className="p-4">
+          </div>
+          <Header stream={streamDetail} onStreamUpdate={setStreamDetail} />
         </div>
 
         {/* Khu vực chat: đặt ở cột bên phải */}

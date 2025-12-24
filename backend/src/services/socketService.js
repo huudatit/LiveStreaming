@@ -56,10 +56,11 @@ export const initSocketService = (io) => {
         );
 
         io.to(roomName).emit("viewer-count", { count: viewerCount });
-        io.to(roomName).emit("system-message", {
-          message: `${displayName} joined the stream`,
-          timestamp: new Date(),
-        });
+        // Commented out to prevent spam when page refreshes
+        // io.to(roomName).emit("system-message", {
+        //   message: `${displayName} joined the stream`,
+        //   timestamp: new Date(),
+        // });
         console.log(
           `👤 ${displayName} joined ${roomName} (${viewerCount} viewers)`
         );
@@ -228,12 +229,13 @@ async function handleLeaveRoom(socket, roomName, io) {
 
     io.to(roomName).emit("viewer-count", { count: viewerCount });
 
-    if (userInfo?.displayName) {
-      io.to(roomName).emit("system-message", {
-        message: `${userInfo.displayName} left the stream`,
-        timestamp: new Date(),
-      });
-    }
+    // Commented out to prevent spam when page refreshes
+    // if (userInfo?.displayName) {
+    //   io.to(roomName).emit("system-message", {
+    //     message: `${userInfo.displayName} left the stream`,
+    //     timestamp: new Date(),
+    //   });
+    // }
 
     if (viewerCount === 0) {
       activeRooms.delete(roomName);

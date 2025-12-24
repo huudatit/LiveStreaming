@@ -15,7 +15,7 @@ const router = express.Router();
 router.post("/start", protectedRoute, startRecording);
 
 // Stop recording a stream (Private - Streamer only)
-router.post("/end", protectedRoute, stopRecording);
+router.post("/stop", protectedRoute, stopRecording);
 
 // Webhook endpoint for LiveKit Egress completion (Public but should be secured)
 router.post("/webhook", egressWebhook);

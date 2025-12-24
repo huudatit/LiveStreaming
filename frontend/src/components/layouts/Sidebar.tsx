@@ -82,6 +82,19 @@ export default function Sidebar() {
           Dashboard
         </NavLink>
 
+        <NavLink
+          to="/subscriptions"
+          className={({ isActive }) =>
+            `block px-3 py-2 rounded-lg transition ${
+              isActive
+                ? "bg-white/10 border border-white/10"
+                : "hover:bg-white/5"
+            }`
+          }
+        >
+          Subscriptions
+        </NavLink>
+
         {/* Khu vực kênh đang theo dõi (Subscriptions) */}
         <div className="mt-4">
           <p className="text-xs uppercase text-slate-400 mb-2 px-2">

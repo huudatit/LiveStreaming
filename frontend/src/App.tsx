@@ -2,6 +2,7 @@
 import { Routes, Route } from "react-router-dom";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import AppLayout from "@/components/layouts/AppLayout";
+import AuthProvider from "@/components/auth/AuthProvider";
 
 // Pages
 import HomePage from "@/pages/HomePage";
@@ -10,13 +11,16 @@ import SignUpPage from "@/pages/SignUpPage";
 import DashboardPage from "@/pages/DashboardPage";
 import KeysPage from "@/pages/KeysPage";
 import ViewerPage from "@/pages/ViewerPage";
-import VODPlayerPage from "./pages/VODPlayerPage";
-import SettingsPage from "./pages/SettingPage";
+import VODPlayerPage from "@/pages/VODPlayerPage";
+import SettingsPage from "@/pages/SettingPage";
+import ChannelPage from "@/pages/ChannelPage";
+import SubscriptionsPage from "@/pages/SubscriptionsPage";
 // import VODPlayerPage from "@/pages/VODPlayerPage";
 
 export default function App() {
   return (
-    <Routes>
+    <AuthProvider>
+      <Routes>
       {/* Public Routes */}
       <Route path="/signin" element={<SignInPage />} />
       <Route path="/signup" element={<SignUpPage />} />
@@ -27,6 +31,8 @@ export default function App() {
         <Route path="/keys" element={<KeysPage />} />
         <Route path="/watch/:streamId" element={<ViewerPage />} />
         <Route path="/vod/:vodId" element={<VODPlayerPage />} />
+        <Route path="/channel/:username" element={<ChannelPage />} />
+        <Route path="/subscriptions" element={<SubscriptionsPage />} />
       </Route>
 
       {/* Protected Routes with Layout */}
@@ -38,6 +44,8 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/watch/:streamId" element={<ViewerPage />} />
           <Route path="/vod/:vodId" element={<VODPlayerPage />} />
+          <Route path="/channel/:username" element={<ChannelPage />} />
+          <Route path="/subscriptions" element={<SubscriptionsPage />} />
         </Route>
       </Route>
 
@@ -57,5 +65,6 @@ export default function App() {
         }
       />
     </Routes>
+    </AuthProvider>
   );
 }
