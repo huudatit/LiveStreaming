@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   LiveKitRoom,
   useTracks,
@@ -38,26 +38,17 @@ interface HeaderProps {
 
 function Header({ stream, onStreamUpdate }: HeaderProps) {
   const { user: currentUser } = useAuthStore();
-  const navigate = useNavigate();
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [loading, setLoading] = useState(false);
-
 
   const streamer =
     stream && typeof stream.streamer !== "string" ? stream.streamer : null;
 
   const channelName = streamer?.displayName || "Channel";
   const avatarUrl = streamer?.avatarUrl;
-  
-  // Debug logging
-  console.log("Stream object:", stream);
-  console.log("Streamer:", streamer);
-  
   const streamerId =
-    typeof stream?.streamer === "string" 
-      ? stream.streamer 
-      : (stream?.streamer as any)?._id || (stream?.streamer as any)?.id;
+    typeof stream?.streamer === "string" ? stream.streamer : streamer?._id;
 
   // Lấy số lượng followers và kiểm tra trạng thái follow
   useEffect(() => {
@@ -125,13 +116,11 @@ function Header({ stream, onStreamUpdate }: HeaderProps) {
 
   // Xử lý follow/unfollow
   const handleFollow = async () => {
-    console.log("handleFollow called", { currentUser, streamerId, loading });
-    
     if (!currentUser) {
       toast.error("Vui lòng đăng nhập để theo dõi");
       // Redirect to sign-in page after 1 second
       setTimeout(() => {
-        navigate("/signin");
+        window.location.href = "/signin";
       }, 1000);
       return;
     }

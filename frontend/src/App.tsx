@@ -15,11 +15,13 @@ import VODPlayerPage from "@/pages/VODPlayerPage";
 import SettingsPage from "@/pages/SettingPage";
 import ChannelPage from "@/pages/ChannelPage";
 import SubscriptionsPage from "@/pages/SubscriptionsPage";
+
 // import VODPlayerPage from "@/pages/VODPlayerPage";
 
 export default function App() {
   return (
     <AuthProvider>
+
       <Routes>
       {/* Public Routes */}
       <Route path="/signin" element={<SignInPage />} />

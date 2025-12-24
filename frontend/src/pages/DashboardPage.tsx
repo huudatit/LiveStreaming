@@ -4,6 +4,7 @@ import { api } from "@/lib/axios";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useStreamStore } from "@/stores/useStreamStore";
+import { socket } from "@/services/socket";
 import ReactionStats from "@/components/stream/ReactionStat";
 import LiveBadge from "@/components/home/LiveBadge";
 
@@ -42,6 +43,9 @@ export default function DashboardPage() {
 
   const [isRecording, setIsRecording] = useState(false);
   const [vodId, setVodId] = useState<string | null>(null);
+
+  // Reaction count for real-time updates
+  const [reactionCount, setReactionCount] = useState(0);
 
   // Dialog tạo stream mới
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -251,6 +255,40 @@ export default function DashboardPage() {
     user?._id
   );
 
+  // 🆕 Listen for real-time reaction count updates
+  useEffect(() => {
+    if (!stream?._id) return;
+
+    const handleReactionStatsUpdate = (data: {
+      streamId: string;
+      total: number;
+    }) => {
+      if (data.streamId === stream._id) {
+        console.log("📊 Dashboard reaction count updated:", data.total);
+        setReactionCount(data.total);
+      }
+    };
+
+    socket.on("reaction-stats-updated", handleReactionStatsUpdate);
+
+    // Fetch initial count
+    const fetchInitialCount = async () => {
+      try {
+        const { data } = await api.get(`/reactions/stats/${stream._id}`);
+        if (data.success) {
+          setReactionCount(data.total);
+        }
+      } catch (error) {
+        console.error("Error fetching initial reaction count:", error);
+      }
+    };
+    fetchInitialCount();
+
+    return () => {
+      socket.off("reaction-stats-updated", handleReactionStatsUpdate);
+    };
+  }, [stream?._id]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0b0f1a] text-slate-300">
@@ -373,31 +411,6 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            {/* Nút Go Live (khi đang preparing) */}
-            {stream && !stream.isLive && (
-              <Button
-                onClick={async () => {
-                  try {
-                    const { data } = await api.patch(`/streams/${stream._id}`, {
-                      isLive: true,
-                      status: 'live',
-                    });
-                    if (data.success) {
-                      toast.success("Đã chuyển sang trạng thái LIVE!");
-                      // Immediately refresh stream data
-                      await fetchStream();
-                    }
-                  } catch (err: any) {
-                    console.error("❌ Go Live error:", err.response?.data || err.message);
-                    toast.error("Không thể chuyển sang LIVE");
-                  }
-                }}
-                className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
-              >
-                🎬 Go Live
-              </Button>
-            )}
-
             {/* Nút Quay phim */}
             {stream && (
               <Button
@@ -530,18 +543,18 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 gap-4">
               <Card className="bg-white/5 border-white/10">
                 <CardContent className="p-4 text-center">
-                  <p className="text-xs font-medium text-slate-400 uppercase mb-1">
+                  <p className="text-xs font-medium text-white uppercase mb-1">
                     Người xem
                   </p>
-                  <p className="text-3xl font-bold">{viewerCount}</p>
+                  <p className="text-3xl font-bold text-white">{viewerCount}</p>
                 </CardContent>
               </Card>
               <Card className="bg-white/5 border-white/10">
                 <CardContent className="p-4 text-center">
-                  <p className="text-xs font-medium text-slate-400 uppercase mb-1">
+                  <p className="text-xs font-medium text-white uppercase mb-1">
                     Cảm xúc
                   </p>
-                  <p className="text-3xl font-bold text-slate-300">—</p>
+                  <p className="text-3xl font-bold text-white">{reactionCount}</p>
                 </CardContent>
               </Card>
             </div>
@@ -550,12 +563,7 @@ export default function DashboardPage() {
             {stream._id && <ReactionStats streamId={stream._id} />}
 
             {/* ChatBox: Giới hạn chiều cao để không đẩy page */}
-            <Card className="bg-white/5 border-white/10 flex flex-col overflow-hidden h-[500px] xl:h-[calc(100vh-420px)]">
-              <CardHeader className="p-4 border-b border-white/10 bg-white/5">
-                <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-400">
-                  Trò chuyện trực tiếp
-                </CardTitle>
-              </CardHeader>
+            <Card className="bg-white/5 border-white/10 flex flex-col overflow-hidden">
               <div className="flex-1 overflow-hidden">
                 <ChatBox streamId={stream._id} roomName={stream.roomName} />
               </div>
