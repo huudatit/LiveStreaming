@@ -5,6 +5,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, Radio } from "lucide-react";
 import { toast } from "sonner";
+import { socket } from "@/services/socket";
 
 interface Channel {
   _id: string;
@@ -39,14 +40,25 @@ export default function SubscriptionsPage() {
 
     fetchChannels();
 
-    // Listen for follow/unfollow events
-    const handleFollowingUpdate = () => {
-      fetchChannels();
+    const onLive = (p: { streamerId: string }) => {
+      setChannels((prev) =>
+        prev.map((c) => (c._id === p.streamerId ? { ...c, isLive: true } : c))
+      );
+      toast.info("Một kênh bạn theo dõi đang LIVE!");
     };
-    window.addEventListener("followingUpdated", handleFollowingUpdate);
+
+    const onOffline = (p: { streamerId: string }) => {
+      setChannels((prev) =>
+        prev.map((c) => (c._id === p.streamerId ? { ...c, isLive: false } : c))
+      );
+    };
+
+    socket.on("followed-stream-live", onLive);
+    socket.on("followed-stream-offline", onOffline);
 
     return () => {
-      window.removeEventListener("followingUpdated", handleFollowingUpdate);
+      socket.off("followed-stream-live", onLive);
+      socket.off("followed-stream-offline", onOffline);
     };
   }, [user]);
 

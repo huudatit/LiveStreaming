@@ -1,10 +1,26 @@
+// backend/src/controllers/streamController.js
+
 import crypto from "crypto";
 import Stream from "../models/Stream.js";
 import User from "../models/User.js";
 import { createRoom, deleteRoom } from "../services/livekitService.js";
-import { RoomServiceClient } from "livekit-server-sdk";
+import {
+  RoomServiceClient,
+  IngressClient,
+  IngressInput,
+  IngressVideoEncodingPreset,
+  IngressAudioEncodingPreset,
+  TrackSource,
+} from "livekit-server-sdk"; // <-- Import thêm Ingress
 import { livekitConfig } from "../config/livekit.js";
 import mongoose from "mongoose";
+
+// Khởi tạo Ingress Client
+const ingressClient = new IngressClient(
+  livekitConfig.url,
+  livekitConfig.apiKey,
+  livekitConfig.apiSecret
+);
 
 const roomService = new RoomServiceClient(
   livekitConfig.url,
@@ -12,52 +28,45 @@ const roomService = new RoomServiceClient(
   livekitConfig.apiSecret
 );
 
-// POST /api/streams/create  (Private)
 export const createStream = async (req, res) => {
   try {
     const { title, description = "" } = req.body;
     const userId = req.user._id;
 
     if (!title?.trim()) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Vui lòng nhập tiêu đề cho buổi stream",
-        });
-    }
-
-    // (Tuỳ chọn) Chặn nếu user đang có stream live chưa kết thúc
-    const existingLive = await Stream.findOne({
-      streamerId: userId,
-      isLive: true,
-      status: "live",
-    });
-    if (existingLive) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "Bạn đang có một buổi stream đang phát. Hãy kết thúc trước khi tạo buổi mới.",
-        stream: existingLive,
-      });
+      return res.status(400).json({ success: false, message: "Thiếu tiêu đề" });
     }
 
     const user = await User.findById(userId).lean();
-    if (!user) {
+    if (!user)
       return res
         .status(404)
-        .json({ success: false, message: "Không tìm thấy user" });
-    }
+        .json({ success: false, message: "User not found" });
 
-    // Tạo roomName duy nhất (không tái sử dụng _id user)
-    const roomName = `room_${userId.toString()}_${Date.now()}_${crypto
-      .randomBytes(4)
-      .toString("hex")}`;
+    // 1. Tạo Room Name
+    const roomName = `room_${userId}_${Date.now()}`;
 
-    // Tạo phòng trên LiveKit
+    // 2. Tạo Room trên LiveKit
     await createRoom(roomName, { title, streamerId: userId.toString() });
 
-    // Lưu vào Mongo
+    // 3. [MỚI] Tạo Ingress (RTMP) để lấy Server URL và Stream Key cho OBS
+    const ingress = await ingressClient.createIngress(IngressInput.RTMP_INPUT, {
+      name: roomName,
+      roomName: roomName,
+      participantName: user.displayName,
+      participantIdentity: userId.toString(),
+      // Tùy chọn: Cấu hình preset encoding (để giảm tải hoặc tăng chất lượng)
+      video: {
+        source: 1, // CAMERA
+        preset: IngressVideoEncodingPreset.H264_1080P_30FPS_3_LAYERS,
+      },
+      audio: {
+        source: 1, // MICROPHONE
+        preset: IngressAudioEncodingPreset.OPUS_STEREO_96KBPS,
+      },
+    });
+
+    // 4. Lưu vào Mongo (Kèm thông tin Ingress)
     const newStream = await Stream.create({
       roomName: roomName,
       title: title.trim(),
@@ -65,87 +74,74 @@ export const createStream = async (req, res) => {
       streamerId: userId,
       username: user.username,
       displayName: user.displayName,
-      isLive: true,
-      status: "live",
-      startedAt: new Date(),
-      viewerCount: 0,
+      isLive: false, 
+      status: "preparing", // Trạng thái chờ
+
+      // Lưu thông tin kết nối OBS
+      ingressId: ingress.ingressId,
+      serverUrl: ingress.url, // rtmp://...
+      streamKey: ingress.streamKey, // khoá bí mật
     });
 
-    res
-      .status(201)
-      .json({
-        success: true,
-        message: "Buổi stream đã được tạo",
-        stream: newStream,
-      });
+    res.status(201).json({
+      success: true,
+      message: "Tạo stream thành công",
+      stream: newStream, // Frontend sẽ nhận được serverUrl và streamKey ở đây
+    });
   } catch (error) {
-    console.error("Lỗi khi tạo stream:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Không thể tạo buổi stream",
-      });
+    console.error("Create stream error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // GET /api/streams/live  (Public)
 export const getLiveStreams = async (_req, res) => {
   try {
-    // 1. Get all rooms from LiveKit
-    const rooms = await roomService.listRooms({});
-    const roomNames = rooms.map(r => String(r.name));
-
-    console.log("📡 LiveKit rooms:", roomNames);
-
-    // 2. Get streams from MongoDB that match LiveKit rooms
-    const streams = await Stream.find({
-      roomName: { $in: roomNames },
-      isLive: true,
-    })
-      .populate("streamerId", "username displayName avatar avatarUrl _id")
+    // 1. Lấy tất cả stream đang live
+    const streams = await Stream.find({ isLive: true })
+      .populate(
+        "streamerId",
+        "username displayName avatar avatarUrl _id followers"
+      )
+      .sort({ createdAt: -1 })
       .lean();
 
-    console.log("📊 DB streams:", streams.map(s => s.roomName));
+    // 2. Lọc và Format
+    const items = streams.reduce((acc, stream) => {
+      // KIỂM TRA QUAN TRỌNG: Nếu không tìm thấy streamer (null/undefined) -> Bỏ qua stream này
+      if (!stream.streamerId) {
+        return acc;
+      }
 
-    // 3. Enrich MongoDB data with LiveKit room data
-    const items = streams.map((stream) => {
-      const liveKitRoom = rooms.find(r => String(r.name) === stream.roomName);
-      
-      const participants =
-        typeof liveKitRoom?.numParticipants === "bigint"
-          ? Number(liveKitRoom.numParticipants)
-          : liveKitRoom?.numParticipants ?? 0;
+      const streamer = stream.streamerId;
 
-      const startedAtSec =
-        typeof liveKitRoom?.creationTime === "bigint"
-          ? Number(liveKitRoom.creationTime)
-          : liveKitRoom?.creationTime ?? 0;
-
-      return {
+      acc.push({
         _id: stream._id,
         streamId: stream._id.toString(),
         room: stream.roomName,
         title: stream.title,
         description: stream.description,
-        streamer: stream.streamerId, // Already populated
-        isLive: true,
-        status: stream.status,
-        viewerCount: participants,
-        participants,
-        startedAt: startedAtSec * 1000,
         thumbnailUrl: stream.thumbnailUrl,
-      };
-    });
-
-    console.log("✅ Returning streams:", items.length);
+        isLive: true,
+        viewerCount: stream.viewerCount || 0,
+        startedAt: stream.startedAt,
+        streamer: {
+          _id: streamer._id,
+          username: streamer.username,
+          displayName: streamer.displayName,
+          avatar: streamer.avatar || streamer.avatarUrl,
+          followersCount: streamer.followers ? streamer.followers.length : 0,
+        },
+      });
+      return acc;
+    }, []);
 
     return res.json({ success: true, items });
   } catch (e) {
     console.error("getLiveStreams error:", e);
     return res
       .status(500)
-      .json({ success: false, message: e?.message || "Cannot list rooms" });
+      .json({ success: false, message: "Lỗi lấy danh sách stream" });
   }
 };
 
@@ -157,7 +153,7 @@ export const meLive = async (req, res) => {
 
     // 1) Lấy stream mới nhất của user từ DB
     const streamerId = new mongoose.Types.ObjectId(userIdStr);
-    const stream = await Stream.findOne({ streamerId }).sort({ createdAt: -1 });
+    const stream = await Stream.findOne({ streamerId, status: { $in: ["preparing", "live"] } }).sort({ createdAt: -1 });
 
     if (!stream) {
       return res.json({ success: true, live: false });
@@ -196,58 +192,85 @@ export const meLive = async (req, res) => {
 export const getStreamById = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    console.log("🔍 getStreamById called with ID:", id);
 
-    const isMongoId = /^[a-f\d]{24}$/i.test(id);
-    const query = isMongoId ? { _id: id } : { roomName: id };
-    
-    console.log("📝 Query:", JSON.stringify(query), "isMongoId:", isMongoId);
+    const or = [{ roomName: id }];
+    if (mongoose.isValidObjectId(id)) or.unshift({ _id: id });
 
-    let stream = await Stream.findOne(query)
+    const stream = await Stream.findOne({ $or: or })
       .populate(
         "streamerId",
         "username displayName avatar avatarUrl followers _id"
       )
       .lean();
-    
-    console.log("📊 Stream found:", stream ? "YES" : "NO");
-    if (stream) {
-      console.log("  - roomName:", stream.roomName);
-      console.log("  - title:", stream.title);
-      console.log("  - streamerId populated:", !!stream.streamerId?.username);
+
+    if (!stream) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy buổi stream",
+      });
     }
 
-    if (!stream)
-      return res
-        .status(404)
-        .json({ success: false, message: "Không tìm thấy buổi stream" });
-    
-    // Check if streamerId is populated (has username field) or just an ObjectId
-    let streamerData = stream.streamerId;
-    
-    // If streamerId doesn't have username, it's not populated - fetch manually
-    if (!streamerData?.username) {
-      console.log("⚠️ Streamer not populated, fetching manually...");
-      streamerData = await User.findById(stream.streamerId).select('username displayName avatar avatarUrl followers _id').lean();
-      console.log("✅ Streamer fetched:", streamerData?.username);
-    }
-    
-    console.log("✅ Returning stream with streamer:", streamerData?.username);
-    
-    res.status(200).json({
-      success: true,
-      stream: {
-        ...stream,
-        streamer: streamerData, // Use fetched or populated streamer data
-        room: stream.roomName,
-      },
-    });
+    const streamer = stream.streamerId;
+
+    const streamOut = {
+      ...stream,
+      room: stream.roomName,
+      streamer: streamer
+        ? {
+            _id: streamer._id,
+            username: streamer.username,
+            displayName: streamer.displayName,
+            avatar: streamer.avatar || streamer.avatarUrl,
+            followersCount: streamer.followers ? streamer.followers.length : 0,
+          }
+        : null,
+    };
+
+    delete streamOut.streamerId;
+
+    return res.status(200).json({ success: true, stream: streamOut });
   } catch (error) {
     console.error("Lỗi khi lấy thông tin stream:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Không thể lấy thông tin buổi stream" });
+    return res.status(500).json({
+      success: false,
+      message: "Không thể lấy thông tin buổi stream",
+    });
+  }
+};
+
+
+// POST /api/streams/:id/start 
+export const startStreamManual = async (req, res) => {
+  try {
+    const { id } = req.params; // id này là streamId hoặc roomName
+    const userId = req.user._id;
+
+    // Tìm stream của user này
+    const stream = await Stream.findOne({ 
+      $or: [{ _id: id }, { roomName: id }],
+      streamerId: userId 
+    });
+
+    if (!stream) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy stream" });
+    }
+
+    // Cưỡng chế cập nhật trạng thái thành LIVE
+    stream.isLive = true;
+    stream.status = "live";
+    stream.startedAt = new Date();
+    await stream.save();
+
+    console.log(`✅ Manually started stream: ${stream.roomName}`);
+
+    res.json({
+      success: true,
+      message: "Đã chuyển trạng thái sang ĐANG PHÁT (LIVE)",
+      stream
+    });
+  } catch (error) {
+    console.error("Manual start error:", error);
+    res.status(500).json({ success: false, message: "Lỗi server" });
   }
 };
 

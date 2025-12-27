@@ -1,5 +1,4 @@
 import { api } from "@/lib/axios";
-import type { Stream } from "@/types/stream";
 import type { Vod } from "@/types/vod";
 
 export async function fetchLiveStreams() {
@@ -7,10 +6,16 @@ export async function fetchLiveStreams() {
   return res.data.items || [];
 }
 
-export async function fetchStreamDetail(streamId: string): Promise<Stream> {
-  const { data } = await api.get(`/streams/${streamId}`);
-  return data.stream as Stream;
-}
+export const fetchStreamDetail = async (roomId: string) => {
+  // roomId có thể là ID hoặc roomName
+  const response = await api.get(`/streams/${roomId}`);
+
+  // QUAN TRỌNG: Trả về response.data.stream chứ không phải response.data
+  if (response.data && response.data.success) {
+    return response.data.stream;
+  }
+  throw new Error(response.data.message || "Failed to load stream");
+};
 
 export async function fetchViewerToken(room: string, identity: string) {
   try {

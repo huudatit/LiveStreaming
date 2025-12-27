@@ -3,7 +3,9 @@ import LiveCard from "./LiveCard";
 
 export default function LiveGrid({ items }: { items: Stream[] }) {
   if (!items?.length) {
-    return <div className="text-slate-400">Chưa có kênh nào đang live</div>;
+    return (
+      <div className="text-white">No channels are currently live.</div>
+    );
   }
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

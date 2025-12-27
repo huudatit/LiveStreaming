@@ -62,7 +62,7 @@ export default function ReactionStats({ streamId }: ReactionStatsProps) {
   if (loading) {
     return (
       <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-        <div className="text-sm text-slate-400">Đang tải thống kê...</div>
+        <div className="text-sm text-slate-400">Loading statistics...</div>
       </div>
     );
   }
@@ -71,7 +71,7 @@ export default function ReactionStats({ streamId }: ReactionStatsProps) {
     return (
       <div className="p-4 bg-white/5 rounded-xl border border-white/10">
         <div className="text-sm text-slate-400">
-          Chưa có reaction nào. Hãy là người đầu tiên!
+          No reactions yet. Be the first!
         </div>
       </div>
     );
@@ -81,9 +81,9 @@ export default function ReactionStats({ streamId }: ReactionStatsProps) {
     <div className="p-4 bg-white/5 rounded-xl border border-white/10">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-slate-300">
-          Thống kê Reactions
+          Reactions statistics
         </h3>
-        <span className="text-xs text-slate-500">{total} tổng</span>
+        <span className="text-xs text-slate-500">{total} Total</span>
       </div>
 
       <div className="space-y-2">

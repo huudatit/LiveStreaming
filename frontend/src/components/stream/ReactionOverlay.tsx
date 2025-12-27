@@ -65,7 +65,7 @@ export default function ReactionOverlay({ reactions }: ReactionOverlayProps) {
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-50">
       {reactions.length > 0 && (
         <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-          {reactions.length} reactions
+          {reactions.length} Reactions
         </div>
       )}
       {reactions.map((reaction) => (

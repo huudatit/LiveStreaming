@@ -61,7 +61,7 @@ export default function SettingsPage() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0b0f1a] text-white">
-        Vui lòng đăng nhập để truy cập trang này
+        Please log in to access this page!
       </div>
     );
   }
@@ -70,9 +70,9 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-[#0b0f1a] text-white p-6">
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Cài đặt tài khoản</h1>
+          <h1 className="text-3xl font-bold">Profile</h1>
           <p className="text-slate-400 mt-2">
-            Quản lý thông tin cá nhân và tùy chỉnh hồ sơ của bạn
+            Manage your personal information and customize your profile.
           </p>
         </div>
 
@@ -83,7 +83,7 @@ export default function SettingsPage() {
           <Card className="bg-white/5 border-white/10 lg:col-span-1">
             <CardHeader>
               <CardTitle className="text-white text-center">
-                Ảnh đại diện
+                Your Avatar
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-4">
@@ -101,8 +101,8 @@ export default function SettingsPage() {
                 )}
               </div>
               <div className="text-center">
-                <p className="font-semibold">{form.displayName}</p>
-                <p className="text-sm text-slate-400">@{user.username}</p>
+                <p className="font-semibold text-white">{form.displayName}</p>
+                <p className="text-sm text-white">@{user.username}</p>
               </div>
             </CardContent>
           </Card>
@@ -110,16 +110,14 @@ export default function SettingsPage() {
           {/* Form chỉnh sửa */}
           <Card className="bg-white/5 border-white/10 lg:col-span-2">
             <CardHeader>
-              <CardTitle className="text-white">Thông tin cá nhân</CardTitle>
-              <CardDescription>
-                Cập nhật thông tin hiển thị công khai của bạn
-              </CardDescription>
+              <CardTitle className="text-white">Information</CardTitle>
+              <CardDescription>Update your information.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Username (read-only) */}
                 <div className="space-y-2 text-white">
-                  <Label htmlFor="username">Tên đăng nhập</Label>
+                  <Label htmlFor="username">Username</Label>
                   <Input
                     id="username"
                     value={user.username}
@@ -127,7 +125,7 @@ export default function SettingsPage() {
                     className="bg-white/5 border-white/10 text-slate-400"
                   />
                   <p className="text-xs text-red-500">
-                    *Tên đăng nhập không thể thay đổi
+                    *Username cannot be changed!
                   </p>
                 </div>
 
@@ -141,13 +139,13 @@ export default function SettingsPage() {
                     className="bg-white/5 border-white/10 text-slate-400"
                   />
                   <p className="text-xs text-red-500">
-                    *Email không thể thay đổi
+                    *Email cannot be changed!
                   </p>
                 </div>
 
                 {/* Display Name */}
                 <div className="space-y-2 text-white">
-                  <Label htmlFor="displayName">Tên hiển thị *</Label>
+                  <Label htmlFor="displayName">Display Name *</Label>
                   <Input
                     id="displayName"
                     value={form.displayName}
@@ -161,23 +159,23 @@ export default function SettingsPage() {
 
                 {/* Bio */}
                 <div className="space-y-2 text-white">
-                  <Label htmlFor="bio">Giới thiệu</Label>
+                  <Label htmlFor="bio">Bio</Label>
                   <Textarea
                     id="bio"
                     value={form.bio}
                     onChange={(e) => setForm({ ...form, bio: e.target.value })}
-                    placeholder="Viết vài dòng về bản thân..."
+                    placeholder="Write a few lines about yourself..."
                     className="bg-white/5 border-white/10 text-white min-h-[120px]"
                     maxLength={500}
                   />
                   <p className="text-xs text-slate-500">
-                    {form.bio.length}/500 ký tự
+                    {form.bio.length}/200 ký tự
                   </p>
                 </div>
 
                 {/* Avatar URL */}
                 <div className="space-y-2 text-white">
-                  <Label htmlFor="avatar">URL ảnh đại diện</Label>
+                  <Label htmlFor="avatar">URL Avatar</Label>
                   <Input
                     id="avatar"
                     value={form.avatar}
@@ -188,7 +186,7 @@ export default function SettingsPage() {
                     className="bg-white/5 border-white/10 text-white"
                   />
                   <p className="text-xs text-slate-500">
-                    Nhập URL hình ảnh từ internet
+                    Input URL image from internet!
                   </p>
                 </div>
 
@@ -201,7 +199,7 @@ export default function SettingsPage() {
                     disabled={loading}
                     className="bg-purple-600 hover:bg-purple-700 text-white"
                   >
-                    {loading ? "Đang lưu..." : "Lưu thay đổi"}
+                    {loading ? "Saving..." : "Saving changes"}
                   </Button>
                   <Button
                     type="button"
@@ -216,7 +214,7 @@ export default function SettingsPage() {
                     }}
                     className="bg-white hover:bg-white/10 border-white/10"
                   >
-                    Hủy
+                    Cancel
                   </Button>
                 </div>
               </form>
@@ -227,32 +225,26 @@ export default function SettingsPage() {
         {/* Thống kê */}
         <Card className="bg-white/5 border-white/10">
           <CardHeader>
-            <CardTitle className="text-white">Thống kê kênh</CardTitle>
+            <CardTitle className="text-white">Channel statistics</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                <p className="text-sm text-slate-400">Người theo dõi</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-center">
+                <p className="text-sm text-slate-400">Subscribers</p>
                 <p className="text-2xl font-bold text-white mt-1">
                   {user.followers?.length || 0}
                 </p>
               </div>
-              <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                <p className="text-sm text-slate-400">Đang theo dõi</p>
+              <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-center">
+                <p className="text-sm text-slate-400">Subscribed</p>
                 <p className="text-2xl font-bold text-white mt-1">
                   {user.following?.length || 0}
                 </p>
               </div>
-              <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                <p className="text-sm text-slate-400">Tổng lượt xem</p>
+              <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-center">
+                <p className="text-sm text-slate-400">Total Views</p>
                 <p className="text-2xl font-bold text-white mt-1">
                   {user.totalViews || 0}
-                </p>
-              </div>
-              <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                <p className="text-sm text-slate-400">Stream Key</p>
-                <p className="text-xs text-purple-400 mt-2 truncate">
-                  {user.streamKey || "N/A"}
                 </p>
               </div>
             </div>

@@ -30,8 +30,19 @@ import {
 } from "@/components/ui/dialog";
 
 import { LiveKitRoom, VideoConference } from "@livekit/components-react";
-import { Video, VideoOff } from "lucide-react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+// 1. Thêm icon Radio
+import { Video, VideoOff, Radio } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useNavigate } from "react-router-dom";
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
@@ -40,6 +51,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ title: "", description: "" });
   const [token, setToken] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
 
   const [isRecording, setIsRecording] = useState(false);
   const [vodId, setVodId] = useState<string | null>(null);
@@ -55,10 +67,11 @@ export default function DashboardPage() {
     description: "",
   });
 
+  const navigate = useNavigate();
+
   // Lấy thông tin stream hiện tại
   const fetchStream = async () => {
     try {
-      // Kiểm tra user trước khi gọi API
       if (!user) {
         console.log("User chưa đăng nhập");
         setLoading(false);
@@ -66,12 +79,12 @@ export default function DashboardPage() {
       }
 
       const { data } = await api.get("/streams/me/live");
-      console.log("📊 /streams/me/live response:", data);
-      
+
       if (data?.streamId && data.roomName) {
         const streamRes = await api.get(`/streams/${data.streamId}`);
-        console.log("📊 Stream data:", streamRes.data.stream);
         setStream(streamRes.data.stream);
+        // Chỉ cập nhật form nếu người dùng chưa đang gõ (để tránh overwrite)
+        // Ở đây mình set luôn cho đơn giản
         setForm({
           title: streamRes.data.stream.title || "",
           description: streamRes.data.stream.description || "",
@@ -79,12 +92,11 @@ export default function DashboardPage() {
       } else {
         setStream(null);
       }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error("Fetch stream error: ", error);
       if (error.response?.status === 401) {
-        toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!");
+        toast.error("Phiên đăng nhập đã hết hạn.");
       }
     } finally {
       setLoading(false);
@@ -94,18 +106,34 @@ export default function DashboardPage() {
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let timer: any;
-
     fetchStream();
     timer = setInterval(fetchStream, 5000);
     return () => clearInterval(timer);
   }, [user]);
 
+  // ============================================
+  // 2. HÀM KÍCH HOẠT GO LIVE (MỚI)
+  // ============================================
+  const handleGoLive = async () => {
+    if (!stream?._id || starting ) return;
+    try {
+      setStarting(true);
 
+      const { data } = await api.post(`/streams/${stream._id}/start`);
+      if (data.success) {
+        toast.success("🚀 Đã lên sóng thành công! User khác có thể thấy bạn.");
+        // Cập nhật ngay state local để giao diện đổi ngay lập tức
+        setStream({ ...stream, isLive: true, status: "live" });
+      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Lỗi khi kích hoạt stream");
+    }
+  };
 
   // Start recording
   const handleStartRecording = async () => {
     if (!stream) return;
-
     try {
       const { data } = await api.post("/vod/start", {
         streamId: stream._id,
@@ -117,28 +145,28 @@ export default function DashboardPage() {
         setVodId(data.vod.vodId);
         toast.success("Đã bắt đầu quay video!");
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error("Start recording error:", error);
       toast.error(
         error.response?.data?.message || "Không thể bắt đầu quay video"
       );
+    } finally {
+      setStarting(false);
     }
   };
 
   // Stop recording
   const handleStopRecording = async () => {
     if (!vodId) return;
-
     try {
       const { data } = await api.post("/vod/stop", { vodId });
-
       if (data.success) {
         setIsRecording(false);
         toast.success("Đã dừng quay video! Video đang được xử lý.");
         setVodId(null);
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error("Stop recording error:", error);
       toast.error(error.response?.data?.message || "Không thể dừng quay video");
@@ -159,15 +187,11 @@ export default function DashboardPage() {
         if (data?.token) {
           setToken(data.token);
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
         console.error("get token error:", err);
-        toast.error(
-          err.response?.data?.message || "Không thể lấy token LiveKit"
-        );
       }
     };
-
     fetchToken();
   }, [stream, user]);
 
@@ -178,9 +202,7 @@ export default function DashboardPage() {
         toast.error("Vui lòng nhập tiêu đề stream!");
         return;
       }
-
       const { data } = await api.post("/streams/create", createForm);
-
       if (data.success) {
         toast.success("Tạo stream thành công!");
         setStream(data.stream);
@@ -190,8 +212,9 @@ export default function DashboardPage() {
         });
         setShowCreateDialog(false);
         setCreateForm({ title: "", description: "" });
+        navigate("/keys");
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Không thể tạo stream");
     }
@@ -201,11 +224,6 @@ export default function DashboardPage() {
   const handleUpdate = async () => {
     try {
       if (!stream) return;
-      
-      // Always use _id for updates to avoid confusion
-      console.log("🔄 Updating stream with _id:", stream._id);
-      console.log("🔄 Form data:", form);
-      
       const { data } = await api.patch(`/streams/${stream._id}`, form);
       if (data.success) {
         toast.success("Cập nhật thành công!");
@@ -215,9 +233,8 @@ export default function DashboardPage() {
           description: data.stream.description || "",
         });
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      console.error("❌ Update error:", err.response?.data || err.message);
       toast.error(err.response?.data?.message || "Lỗi khi cập nhật");
     }
   };
@@ -225,29 +242,24 @@ export default function DashboardPage() {
   // Kết thúc stream
   const handleEndStream = async () => {
     if (!stream) return;
-
     try {
-      // Stop recording first if recording
       if (isRecording && vodId) {
         await handleStopRecording();
       }
-
-      const streamIdentifier = stream._id;
-      console.log("🛑 Ending stream with _id:", streamIdentifier);
-      const { data } = await api.post(`/streams/${streamIdentifier}/end`);
-
+      const { data } = await api.post(`/streams/${stream._id}/end`);
       if (data.success) {
         toast.success("Đã kết thúc buổi stream");
         setStream(null);
         setToken(null);
         setShowEndStreamDialog(false);
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
-      console.error("End stream error:", error);
       toast.error(error.response?.data?.message || "Không thể kết thúc stream");
     }
   };
+
+  const shouldConnect = !!token && stream?.status === "live";
 
   const { viewerCount } = useStreamStore(
     stream?.roomName || "",
@@ -255,34 +267,26 @@ export default function DashboardPage() {
     user?._id
   );
 
-  // 🆕 Listen for real-time reaction count updates
+  // Reaction socket listener
   useEffect(() => {
     if (!stream?._id) return;
-
     const handleReactionStatsUpdate = (data: {
       streamId: string;
       total: number;
     }) => {
       if (data.streamId === stream._id) {
-        console.log("📊 Dashboard reaction count updated:", data.total);
         setReactionCount(data.total);
       }
     };
-
     socket.on("reaction-stats-updated", handleReactionStatsUpdate);
 
-    // Fetch initial count
-    const fetchInitialCount = async () => {
-      try {
-        const { data } = await api.get(`/reactions/stats/${stream._id}`);
-        if (data.success) {
-          setReactionCount(data.total);
-        }
-      } catch (error) {
-        console.error("Error fetching initial reaction count:", error);
-      }
-    };
-    fetchInitialCount();
+    // Initial fetch
+    api
+      .get(`/reactions/stats/${stream._id}`)
+      .then(({ data }) => {
+        if (data.success) setReactionCount(data.total);
+      })
+      .catch(console.error);
 
     return () => {
       socket.off("reaction-stats-updated", handleReactionStatsUpdate);
@@ -292,22 +296,22 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0b0f1a] text-slate-300">
-        Đang tải thông tin stream...
+        Loading stream information...
       </div>
     );
   }
 
-  // Nếu chưa có stream -> hiển thị nút tạo stream
+  // Màn hình tạo stream (khi chưa có stream)
   if (!stream) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#0b0f1a] text-white p-6">
         <Card className="bg-white/5 border-white/10 p-8 max-w-md w-full">
           <CardHeader>
             <CardTitle className="text-2xl text-center text-white">
-              Chưa có buổi phát nào
+              There have been no broadcasts yet.
             </CardTitle>
             <CardDescription className="text-center">
-              Bắt đầu livestream của bạn ngay bây giờ!
+              Start your livestream now!
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center pt-4">
@@ -316,28 +320,26 @@ export default function DashboardPage() {
               className="bg-purple-600 hover:bg-purple-700"
               size="lg"
             >
-              Tạo Stream Mới
+              Create New Stream
             </Button>
           </CardContent>
         </Card>
 
-        {/* Dialog tạo stream */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
           <DialogContent className="bg-[#0b0f1a]/95 backdrop-blur-lg border border-white/10 text-white">
             <DialogHeader>
-              <DialogTitle>Tạo Stream Mới</DialogTitle>
+              <DialogTitle>Create New Stream</DialogTitle>
               <DialogDescription>
-                Nhập thông tin cho buổi livestream của bạn
+                Enter the information for your livestream.
               </DialogDescription>
             </DialogHeader>
-
             <div className="space-y-4 py-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">
-                  Tiêu đề stream *
+                  Stream title *
                 </label>
                 <Input
-                  placeholder="Ví dụ: Chơi game cùng mọi người"
+                  placeholder=""
                   value={createForm.title}
                   onChange={(e) =>
                     setCreateForm({ ...createForm, title: e.target.value })
@@ -345,13 +347,12 @@ export default function DashboardPage() {
                   className="bg-black/40 border-white/10"
                 />
               </div>
-
               <div>
                 <label className="text-sm font-medium mb-2 block">
-                  Mô tả (tùy chọn)
+                  Description (optional)
                 </label>
                 <Textarea
-                  placeholder="Mô tả về nội dung stream..."
+                  placeholder="Description of the stream content..."
                   value={createForm.description}
                   onChange={(e) =>
                     setCreateForm({
@@ -363,20 +364,19 @@ export default function DashboardPage() {
                 />
               </div>
             </div>
-
             <DialogFooter>
               <Button
                 variant="outline"
                 onClick={() => setShowCreateDialog(false)}
-                className="bg-black hover:bg-white hover:text-purple-700"
+                className="bg-black hover:bg-white hover:text-purple-700 cursor-pointer"
               >
-                Hủy
+                Cancel
               </Button>
               <Button
                 onClick={handleCreateStream}
-                className="bg-purple-600 hover:bg-purple-700"
+                className="bg-purple-600 hover:bg-purple-700 cursor-pointer"
               >
-                Tạo Stream
+                Create
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -385,20 +385,13 @@ export default function DashboardPage() {
     );
   }
 
-  // Dashboard khi đã có stream
-  console.log("🎯 Dashboard render - stream state:", {
-    hasStream: !!stream,
-    isLive: stream?.isLive,
-    status: stream?.status,
-    roomName: stream?.roomName,
-    _id: stream?._id,
-  });
-
+  // ===========================================
+  // UI DASHBOARD CHÍNH
+  // ===========================================
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
-      {/* Container chính: Đảm bảo padding đồng nhất và giới hạn chiều rộng */}
       <div className="mx-auto w-full max-w-7xl p-4 lg:p-6 space-y-6">
-        {/* 1. Header Section: Sử dụng flex-col trên mobile và flex-row trên desktop */}
+        {/* HEADER */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-3">
@@ -406,7 +399,7 @@ export default function DashboardPage() {
               <LiveBadge live={stream?.isLive} />
             </h1>
             <p className="text-sm text-slate-400">
-              Quản lý buổi phát sóng và tương tác với người xem
+              Manage the broadcast and interact with viewers.
             </p>
           </div>
 
@@ -418,24 +411,34 @@ export default function DashboardPage() {
                   isRecording ? handleStopRecording : handleStartRecording
                 }
                 variant={isRecording ? "destructive" : "secondary"}
-                className="flex-1 sm:flex-none gap-2"
+                className="flex-1 sm:flex-none gap-2 bg-white"
               >
                 {isRecording ? (
                   <>
-                    <VideoOff className="size-4 animate-pulse" />
-                    Dừng quay
+                    <VideoOff className="size-4 animate-pulse" /> End recording
                   </>
                 ) : (
                   <>
-                    <Video className="size-4" />
-                    Bắt đầu quay
+                    <Video className="size-4" /> Start recording
                   </>
                 )}
               </Button>
             )}
 
-            {/* Nút Kết thúc Stream */}
-            {stream && (
+            {/* ======================================================== */}
+            {/* 3. NÚT GO LIVE HOẶC END STREAM */}
+            {/* ======================================================== */}
+            {stream && !stream.isLive ? (
+              // NÚT GO LIVE: Chỉ hiện khi chưa Live
+              <Button
+                onClick={handleGoLive}
+                className="bg-red-600 hover:bg-red-700 flex-1 sm:flex-none gap-2 font-bold"
+              >
+                <Radio className="size-4" />
+                Go Live
+              </Button>
+            ) : (
+              // NÚT END STREAM: Hiện khi Đang Live
               <Button
                 variant="destructive"
                 onClick={() => setShowEndStreamDialog(true)}
@@ -444,37 +447,37 @@ export default function DashboardPage() {
                 End Stream
               </Button>
             )}
+            {/* ======================================================== */}
           </div>
         </div>
 
         <Separator className="bg-white/10" />
 
-        {/* 2. Main Layout Grid */}
+        {/* MAIN GRID */}
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6 items-start">
-          {/* --- CỘT TRÁI: Video Preview & Settings --- */}
+          {/* CỘT TRÁI */}
           <div className="space-y-6">
-            {/* Preview LiveKit: Tỉ lệ 16:9 chuẩn */}
+            {/* LiveKit Preview */}
             <div className="relative aspect-video rounded-2xl border border-white/10 bg-black overflow-hidden shadow-2xl">
-              {token ? (
+              {shouldConnect ? (
                 <LiveKitRoom
                   token={token}
                   serverUrl={import.meta.env.VITE_LIVEKIT_URL}
                   connect={true}
                   audio={true}
                   video={true}
-                  onConnected={() => toast.success("Đã kết nối preview!")}
                 >
                   <VideoConference />
                 </LiveKitRoom>
               ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 gap-3">
                   <div className="size-10 border-4 border-t-purple-500 border-white/10 rounded-full animate-spin" />
-                  <p className="text-sm">Đang thiết lập kết nối...</p>
+                  <p className="text-sm">Establishing a connection...</p>
                 </div>
               )}
             </div>
 
-            {/* Trạng thái ghi hình: Nổi bật hơn */}
+            {/* Recording Alert */}
             {isRecording && (
               <Card className="bg-red-500/5 border-red-500/20 overflow-hidden">
                 <div className="h-1 bg-red-500 w-full animate-pulse" />
@@ -482,69 +485,65 @@ export default function DashboardPage() {
                   <div className="size-3 bg-red-500 rounded-full animate-ping" />
                   <div>
                     <p className="font-semibold text-red-400">
-                      Đang lưu bản ghi (VOD)
+                      Saving a record (VOD)
                     </p>
                     <p className="text-xs text-slate-400">
-                      Video sẽ khả dụng trong thư viện sau khi kết thúc buổi
-                      live.
+                      The video will be available after the live stream ends.
                     </p>
                   </div>
                 </CardContent>
               </Card>
             )}
 
-            {/* Thông tin Stream */}
+            {/* Stream Settings */}
             <Card className="bg-white/5 border-white/10 shadow-lg">
               <CardHeader>
-                <CardTitle className="text-lg font-medium">
-                  Chi tiết buổi phát
+                <CardTitle className="text-lg text-white font-medium">
+                  Detail of the stream
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase text-slate-500 ml-1">
-                    Tiêu đề
+                  <label className="text-xs text-white font-semibold uppercase ml-1">
+                    Title
                   </label>
                   <Input
                     value={form.title}
                     onChange={(e) =>
                       setForm((p) => ({ ...p, title: e.target.value }))
                     }
-                    className="bg-black/20 border-white/10 focus:border-purple-500 transition-all"
-                    placeholder="Nhập tiêu đề hấp dẫn..."
+                    className="bg-black/20 border-white/10 focus:border-purple-500 text-white"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase text-slate-500 ml-1">
-                    Mô tả
+                  <label className="text-xs font-semibold uppercase text-white ml-1">
+                    Describe
                   </label>
                   <Textarea
                     value={form.description}
                     onChange={(e) =>
                       setForm((p) => ({ ...p, description: e.target.value }))
                     }
-                    className="bg-black/20 border-white/10 focus:border-purple-500 min-h-[120px] resize-none"
-                    placeholder="Kể cho người xem về nội dung hôm nay..."
+                    className="bg-black/20 border-white/10 focus:border-purple-500 min-h-[120px] resize-none text-white"
                   />
                 </div>
                 <Button
                   onClick={handleUpdate}
-                  className="bg-purple-600 hover:bg-purple-700 w-full font-bold shadow-lg shadow-purple-900/20"
+                  className="bg-purple-600 hover:bg-purple-700 w-full font-bold"
                 >
-                  Cập nhật thông tin
+                  Update
                 </Button>
               </CardContent>
             </Card>
           </div>
 
-          {/* --- CỘT PHẢI: Stats & Chat (Sticky) --- */}
+          {/* CỘT PHẢI */}
           <aside className="xl:sticky xl:top-6 space-y-6 flex flex-col h-fit">
-            {/* Stats Cards */}
             <div className="grid grid-cols-2 gap-4">
               <Card className="bg-white/5 border-white/10">
                 <CardContent className="p-4 text-center">
                   <p className="text-xs font-medium text-white uppercase mb-1">
-                    Người xem
+                    Watching
                   </p>
                   <p className="text-3xl font-bold text-white">{viewerCount}</p>
                 </CardContent>
@@ -552,19 +551,19 @@ export default function DashboardPage() {
               <Card className="bg-white/5 border-white/10">
                 <CardContent className="p-4 text-center">
                   <p className="text-xs font-medium text-white uppercase mb-1">
-                    Cảm xúc
+                    Reactions
                   </p>
-                  <p className="text-3xl font-bold text-white">{reactionCount}</p>
+                  <p className="text-3xl font-bold text-white">
+                    {reactionCount}
+                  </p>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Reaction Stats */}
             {stream._id && <ReactionStats streamId={stream._id} />}
 
-            {/* ChatBox: Giới hạn chiều cao để không đẩy page */}
-            <Card className="bg-white/5 border-white/10 flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-hidden">
+            <Card className="bg-white/5 border-white/10 flex flex-col overflow-hidden h-[650px]">
+              <div className="flex-1 overflow-hidden h-full min-h-0">
                 <ChatBox streamId={stream._id} roomName={stream.roomName} />
               </div>
             </Card>
@@ -572,7 +571,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* AlertDialog: Nên đặt ngoài cùng để tránh lỗi z-index/stacking context */}
       <AlertDialog
         open={showEndStreamDialog}
         onOpenChange={setShowEndStreamDialog}
@@ -580,27 +578,21 @@ export default function DashboardPage() {
         <AlertDialogContent className="bg-[#0b0f1a]/95 backdrop-blur-xl border border-white/10 text-white">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-xl">
-              Kết thúc livestream?
+              End livestream?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              Hành động này sẽ ngắt kết nối với tất cả người xem.
-              {isRecording && (
-                <span className="block mt-2 text-red-400">
-                  Lưu ý: Hệ thống sẽ tự động hoàn tất quá trình lưu video bản
-                  ghi.
-                </span>
-              )}
+              This action will disconnect all viewers.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-white/5 hover:bg-white/10 border-white/10">
-              Hủy
+              Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleEndStream}
               className="bg-red-600 hover:bg-red-700"
             >
-              Xác nhận kết thúc
+              Confirm
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

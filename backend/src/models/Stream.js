@@ -1,8 +1,16 @@
 import mongoose from "mongoose";
 
+const participantSchema = new mongoose.Schema(
+  {
+
+  }
+);
+
+
 const streamSchema = new mongoose.Schema(
   {
     ingressId: { type: String },
+    egressId: { type: String },
     streamKey: { type: String },
     serverUrl: { type: String },
     username: {
@@ -42,12 +50,12 @@ const streamSchema = new mongoose.Schema(
       default: "preparing",
     },
     viewerCount: { type: Number, default: 0 },
-    peakViewerCount: { type: Number, default: 0 }, // Số người xem cao nhất
+    peakViewerCount: { type: Number, default: 0 }, 
     startedAt: { type: Date, default: Date.now },
     endedAt: { type: Date },
     duration: { type: Number, default: 0 },
     thumbnailUrl: { type: String },
-    recordingUrl: { type: String }, // URL video đã lưu
+    recordingUrl: { type: String }, 
     recordingStatus: {
       type: String,
       enum: ["none", "recording", "processing", "ready", "failed"],

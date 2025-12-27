@@ -56,7 +56,7 @@ const vodSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["PROCESSING", "READY", "FAILED"],
+      enum: ["RECORDING", "PROCESSING", "READY", "FAILED"],
       default: "PROCESSING",
       index: true,
     },

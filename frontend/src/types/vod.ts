@@ -1,4 +1,5 @@
 export type Vod = {
+  createdAt?: string | null;
   vodId: string;
   title: string;
   thumbnail?: string | null;
@@ -6,6 +7,6 @@ export type Vod = {
   views: number;
   duration: number;
   recordedAt: string;
-  vodLink?: string | null; // chỉ có khi gọi detail
-  status?: "PROCESSING" | "READY" | "FAILED";
+  vodLink?: string | null; 
+  status?: "RECORDING" | "PROCESSING" | "READY" | "FAILED";
 };
