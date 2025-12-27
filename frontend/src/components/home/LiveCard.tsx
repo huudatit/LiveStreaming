@@ -13,15 +13,15 @@ export default function LiveCard({ s }: { s: Stream }) {
             <LiveBadge live />
           </div>
           <div className="rounded px-2 py-1 text-xs bg-black/50 text-white">
-            {s.participants ?? 0} Đang xem
+            {s.viewerCount ?? 0} Watching
           </div>
         </div>
         <CardContent className="p-3 text-white">
           <p className="font-medium truncate">{title}</p>
           <p className="text-xs text-slate-400 mt-1">
             {s.startedAt
-              ? `Bắt đầu: ${new Date(s.startedAt).toLocaleString()}`
-              : "Đang phát"}
+              ? `Started: ${new Date(s.startedAt).toLocaleString()}`
+              : "Now"}
           </p>
         </CardContent>
       </Card>

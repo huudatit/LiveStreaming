@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { fetchLiveStreams, fetchVods } from "@/services/streamService";
+import { fetchLiveStreams } from "@/services/streamService";
+import { fetchVods } from "@/services/vodService";
 import LiveGrid from "@/components/home/LiveGrid";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import type { Stream } from "@/types/stream";
@@ -42,7 +43,7 @@ export default function HomePage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen text-white bg-[#0b0f1a]">
-        Đang tải danh sách livestream và video...
+        Loading livestream and video list...
       </div>
     );
   }
@@ -51,18 +52,18 @@ export default function HomePage() {
     <div className="min-h-screen bg-[#0b0f1a] text-white px-6 py-10 space-y-10">
       {/* Khu vực: Livestream đang diễn ra */}
       <section>
-        <h1 className="text-2xl font-semibold mb-4">🔴 Đang livestream</h1>
+        <h1 className="text-2xl font-semibold mb-4"></h1>
         <LiveGrid items={liveStreams} />
       </section>
 
       {/* Khu vực: Video đã lưu (VOD) */}
       <section>
-        <h2 className="text-2xl font-semibold mb-4">🎬 Video đã lưu</h2>
+        <h2 className="text-2xl font-semibold mb-4"></h2>
 
         {vods.length === 0 ? (
           // Trường hợp không có VOD nào
-          <p className="text-slate-400">
-            Chưa có video nào được lưu. Hãy quay lại sau.
+          <p className="text-white">
+            No videos have been saved yet. Please come back later.
           </p>
         ) : (
           // Danh sách VOD hiển thị dạng lưới
@@ -73,8 +74,8 @@ export default function HomePage() {
                 className="bg-white/5 border-white/10 hover:bg-white/10 transition"
               >
                 <CardHeader>
-                  <CardTitle className="text-sm truncate">
-                    {v.title || "Buổi phát không tên"}
+                  <CardTitle className="text-sm truncate text-white">
+                    {v.title || "Video no name"}
                   </CardTitle>
                 </CardHeader>
 
@@ -89,7 +90,7 @@ export default function HomePage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full grid place-items-center text-slate-400 text-sm">
+                        <div className="w-full h-full grid place-items-center text-white text-sm">
                           No thumbnail
                         </div>
                       )}
@@ -99,13 +100,13 @@ export default function HomePage() {
                     </div>
                   </Link>
 
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-white">
                     Creator:{" "}
                     {v.streamer?.displayName ||
                       v.streamer?.username ||
                       "Unknown"}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-white">
                     {new Date(v.recordedAt).toLocaleString()} • {v.views} views
                   </p>
 

@@ -19,8 +19,9 @@ export default function ChatBox({
   roomName?: string;
 }) {
   const { user } = useAuthStore();
+  const guest = `guest_${Math.floor(Math.random() * 1000)}`;
   const displayName =
-    user?.displayName || `viewer_${Math.floor(Math.random() * 1000)}`;
+    user?.displayName || guest;
 
   const actualRoomName = roomName || streamId;
   const { messages, sendChat } = useStreamStore(
@@ -39,7 +40,7 @@ export default function ChatBox({
   };
 
   return (
-    <Card className="flex flex-col h-[625px] bg-[#0b0f1a]/80 border-white/10 text-slate-200 backdrop-blur-md">
+    <Card className="flex flex-col h-full min-h-0 bg-[#0b0f1a]/80 border-white/10 text-slate-200 backdrop-blur-md">
       <CardHeader className="pb-2">
         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
           💬 Chat
@@ -47,11 +48,11 @@ export default function ChatBox({
       </CardHeader>
 
       {/* Messages list */}
-      <CardContent className="flex-1 overflow-hidden p-0">
+      <CardContent className="flex-1 min-h-0 overflow-hidden p-0">
         <ScrollArea className="h-full px-4 py-2 space-y-2">
           {messages.length === 0 ? (
             <p className="text-center text-slate-500 text-sm">
-              Chưa có tin nhắn nào
+              No messages received yet.
             </p>
           ) : (
             messages.map((m, i) => (
@@ -74,14 +75,14 @@ export default function ChatBox({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Nhập tin nhắn..."
+            placeholder="Input messages..."
             className="bg-black/40 border-white/10 text-white placeholder:text-slate-500 w-75"
           />
           <Button
             onClick={handleSend}
             className="bg-purple-600 hover:bg-purple-700 text-white"
           >
-            Gửi
+            Send
           </Button>
         </div>
       </CardFooter>

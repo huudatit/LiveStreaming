@@ -10,6 +10,8 @@ import {
 import { livekitConfig } from "../config/livekit.js";
 import Stream from "../models/Stream.js";
 import User from "../models/User.js";
+import { WebhookReceiver } from "livekit-server-sdk";
+import { handleLivekitWebhook } from "./livekitWebhookController.js";
 
 const roomService = new RoomServiceClient(
   livekitConfig.url,
@@ -22,6 +24,22 @@ const ingressClient = new IngressClient(
   livekitConfig.apiKey,
   livekitConfig.apiSecret
 );
+
+const receiver = new WebhookReceiver(
+  process.env.LIVEKIT_API_KEY,
+  process.env.LIVEKIT_API_SECRET
+);
+
+export async function livekitWebhook(req, res) {
+  // IMPORTANT: dùng raw body string để verify signature
+  const auth = req.headers.authorization;
+  const rawBody = req.rawBody ?? JSON.stringify(req.body);
+
+  const event = receiver.receive(rawBody, auth);
+  req.livekitEvent = event;
+
+  return handleLivekitWebhook(req, res);
+}
 
 /**
  * Xóa TẤT CẢ ingress trên account (không chỉ per room)
@@ -177,7 +195,7 @@ export const createIngress = async (req, res) => {
         ingressId: ingress.ingressId,
         streamUrl: ingress.url,
         streamKey: ingress.streamKey,
-        roomName: ingress.ingressId,
+        roomName: ingress.roomName || userId,
         participant: displayName,
       },
     });

@@ -37,56 +37,73 @@ export const getUserProfile = async (req, res) => {
 // @desc    Follow/Unfollow user
 // @route   POST /api/users/:userId/follow
 // @access  Private
+const hasId = (arr, id) => arr?.some((x) => x?.toString() === id?.toString());
+
 export const followUser = async (req, res) => {
   try {
     const targetUserId = req.params.userId;
     const currentUserId = req.user._id;
 
     if (targetUserId === currentUserId.toString()) {
-      return res.status(400).json({
-        success: false,
-        message: "Bạn không thể follow chính mình",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Bạn không thể follow chính mình" });
     }
 
-    const targetUser = await User.findById(targetUserId);
-    const currentUser = await User.findById(currentUserId);
+    const [targetUser, currentUser] = await Promise.all([
+      User.findById(targetUserId).select("_id followers"),
+      User.findById(currentUserId).select("_id following"),
+    ]);
 
     if (!targetUser) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy người dùng",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy người dùng" });
     }
 
-    // Check if already following
-    const isFollowing = currentUser.following.includes(targetUserId);
+    const isFollowing = hasId(currentUser.following, targetUserId);
 
     if (isFollowing) {
-      // Unfollow
-      currentUser.following.pull(targetUserId);
-      targetUser.followers.pull(currentUserId);
+      // Unfollow (atomic)
+      await Promise.all([
+        User.updateOne(
+          { _id: currentUserId },
+          { $pull: { following: targetUserId } }
+        ),
+        User.updateOne(
+          { _id: targetUserId },
+          { $pull: { followers: currentUserId } }
+        ),
+      ]);
     } else {
-      // Follow
-      currentUser.following.push(targetUserId);
-      targetUser.followers.push(currentUserId);
+      // Follow (atomic + chống duplicate)
+      await Promise.all([
+        User.updateOne(
+          { _id: currentUserId },
+          { $addToSet: { following: targetUserId } }
+        ),
+        User.updateOne(
+          { _id: targetUserId },
+          { $addToSet: { followers: currentUserId } }
+        ),
+      ]);
     }
 
-    await currentUser.save();
-    await targetUser.save();
+    const updatedTarget = await User.findById(targetUserId)
+      .select("followers")
+      .lean();
 
-    res.json({
+    return res.json({
       success: true,
       isFollowing: !isFollowing,
-      followersCount: targetUser.followers.length,
+      followersCount: updatedTarget?.followers?.length || 0,
       message: isFollowing ? "Đã bỏ theo dõi" : "Đã theo dõi",
     });
   } catch (error) {
     console.error("Follow user error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi khi thực hiện hành động",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "Lỗi khi thực hiện hành động" });
   }
 };
 
@@ -145,20 +162,17 @@ export const checkIsFollowing = async (req, res) => {
     const targetUserId = req.params.userId;
     const currentUserId = req.user._id;
 
-    const currentUser = await User.findById(currentUserId);
+    const currentUser = await User.findById(currentUserId)
+      .select("following")
+      .lean();
+    const isFollowing = hasId(currentUser?.following, targetUserId);
 
-    const isFollowing = currentUser.following.includes(targetUserId);
-
-    res.json({
-      success: true,
-      isFollowing,
-    });
+    return res.json({ success: true, isFollowing });
   } catch (error) {
     console.error("Check following error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi khi kiểm tra trạng thái follow",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "Lỗi khi kiểm tra trạng thái follow" });
   }
 };
 

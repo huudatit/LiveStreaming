@@ -22,7 +22,6 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function KeysPage() {
   const [isPending, startTransition] = useTransition();
@@ -61,7 +60,7 @@ export default function KeysPage() {
         });
 
         // Log xác nhận request đã được gửi
-        console.log("✅ Sent to backend:", {
+        console.log("Sent to backend:", {
           userId: user._id,
           type: ingressType,
         });
@@ -147,17 +146,6 @@ export default function KeysPage() {
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Cảnh báo: tạo ingress mới có thể reset các stream đang hoạt động */}
-              <Alert
-                variant="default"
-                className="bg-red-500/10 border-red-400/30 text-white"
-              >
-                <AlertTitle>⚠ Warning</AlertTitle>
-                <AlertDescription>
-                  This will reset all active streams.
-                </AlertDescription>
-              </Alert>
             </div>
 
             <DialogFooter className="mt-4 flex justify-end gap-2">

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { userService } from "@/services/userService";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { socket } from "@/services/socket";
 
 interface Channel {
   _id: string;
@@ -44,9 +45,26 @@ export default function Sidebar() {
     };
     window.addEventListener("followingUpdated", handleFollowingUpdate);
 
+    const onLive = (p: { streamerId: string }) => {
+      setFollowingChannels((prev) =>
+        prev.map((c) => (c._id === p.streamerId ? { ...c, isLive: true } : c))
+      );
+    };
+
+    const onOffline = (p: { streamerId: string }) => {
+      setFollowingChannels((prev) =>
+        prev.map((c) => (c._id === p.streamerId ? { ...c, isLive: false } : c))
+      );
+    };
+
+    socket.on("followed-stream-live", onLive);
+    socket.on("followed-stream-offline", onOffline);
+
     return () => {
       clearInterval(interval);
       window.removeEventListener("followingUpdated", handleFollowingUpdate);
+      socket.off("followed-stream-live", onLive);
+      socket.off("followed-stream-offline", onOffline);
     };
   }, [user]);
 
@@ -82,32 +100,18 @@ export default function Sidebar() {
           Dashboard
         </NavLink>
 
-        <NavLink
-          to="/subscriptions"
-          className={({ isActive }) =>
-            `block px-3 py-2 rounded-lg transition ${
-              isActive
-                ? "bg-white/10 border border-white/10"
-                : "hover:bg-white/5"
-            }`
-          }
-        >
-          Subscriptions
-        </NavLink>
 
         {/* Khu vực kênh đang theo dõi (Subscriptions) */}
         <div className="mt-4">
-          <p className="text-xs uppercase text-slate-400 mb-2 px-2">
+          <p className="text-xs uppercase text-white mb-2 px-2">
             Subcriptions
           </p>
 
           {loading ? (
-            <div className="px-2 py-1.5 text-xs text-slate-500">
-              Đang tải...
-            </div>
+            <div className="px-2 py-1.5 text-xs text-slate-500">Loading...</div>
           ) : followingChannels.length === 0 ? (
             <div className="px-2 py-1.5 text-xs text-slate-500">
-              Chưa đăng ký kênh nào
+              You haven't subscribed to any channel yet.
             </div>
           ) : (
             <div className="space-y-1 max-h-[calc(100vh-300px)] overflow-y-auto pr-2">

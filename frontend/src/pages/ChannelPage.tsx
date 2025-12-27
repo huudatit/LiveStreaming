@@ -114,7 +114,7 @@ export default function ChannelPage() {
       <div className="min-h-screen bg-[#0b0f1a] text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p>Đang tải kênh...</p>
+          <p>Loading channel...</p>
         </div>
       </div>
     );
@@ -124,9 +124,9 @@ export default function ChannelPage() {
     return (
       <div className="min-h-screen bg-[#0b0f1a] text-white flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Không tìm thấy kênh</h1>
+          <h1 className="text-2xl font-bold mb-4">Chanel not found</h1>
           <Link to="/" className="text-purple-400 hover:underline">
-            Quay lại trang chủ
+            Comeback Home Page!
           </Link>
         </div>
       </div>
@@ -162,7 +162,7 @@ export default function ChannelPage() {
             </h1>
             <p className="text-slate-400 mb-1">@{channelUser.username}</p>
             <p className="text-slate-400 mb-4">
-              {channelUser.followers?.length || 0} người đăng ký
+              {channelUser.followers?.length || 0} Subscribers
             </p>
 
             {channelUser.bio && (
@@ -181,10 +181,10 @@ export default function ChannelPage() {
                 }
               >
                 {followLoading
-                  ? "Đang xử lý..."
+                  ? "Processing..."
                   : isFollowing
-                  ? "Đã đăng ký"
-                  : "Đăng ký"}
+                  ? "Subscribed"
+                  : "Subscribe"}
               </Button>
             )}
           </div>
@@ -194,15 +194,15 @@ export default function ChannelPage() {
         <div>
           <div className="flex items-center gap-2 mb-6">
             <Video className="w-6 h-6" />
-            <h2 className="text-2xl font-semibold">
-              Video đã phát ({vods.length})
+            <h2 className="text-2xl font-semibold text-white">
+              Video has played ({vods.length})
             </h2>
           </div>
 
           {vods.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
+            <div className="text-center py-12 text-white">
               <Video className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>Kênh này chưa có video nào</p>
+              <p>This channel has no videos yet.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -218,14 +218,14 @@ export default function ChannelPage() {
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-500">
+                        <div className="w-full h-full flex items-center justify-center text-white">
                           No thumbnail
                         </div>
                       )}
 
                       {/* Duration badge */}
                       {vod.duration && (
-                        <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-1 rounded text-xs flex items-center gap-1">
+                        <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-1 rounded text-xs flex items-center gap-1 text-white">
                           <Clock className="size-3" />
                           {formatDuration(vod.duration)}
                         </div>
@@ -234,13 +234,13 @@ export default function ChannelPage() {
 
                     {/* Info */}
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm truncate">
-                        {vod.title || "Video không tên"}
+                      <CardTitle className="text-sm truncate text-white">
+                        {vod.title || "Video no name"}
                       </CardTitle>
                     </CardHeader>
 
                     <CardContent className="space-y-1">
-                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                      <div className="flex items-center gap-3 text-xs text-white">
                         <span className="flex items-center gap-1">
                           <Eye className="size-3" />
                           {vod.views.toLocaleString()} views

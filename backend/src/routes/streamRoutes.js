@@ -7,6 +7,7 @@ import {
   meLive,
   updateStream,
   getVodStreams,
+  startStreamManual
 } from "../controllers/streamController.js";
 import { protectedRoute } from "../middleware/authMiddleware.js";
 
@@ -14,6 +15,9 @@ const router = express.Router();
 
 // Tạo stream mới
 router.post("/create", protectedRoute, createStream);
+
+// Bắt đầu phiên live
+router.post("/:id/start", protectedRoute, startStreamManual);
 
 // Kết thúc stream
 router.post("/:id/end", protectedRoute, endStream);

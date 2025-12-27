@@ -1,8 +1,15 @@
 import VOD from "../models/VOD.js";
 import Streaming from "../models/Stream.js";
 import User from "../models/User.js";
-import { EgressClient, EncodedFileType } from "livekit-server-sdk";
+import {
+  EgressClient,
+  EncodedFileType,
+  EncodedFileOutput,
+  S3Upload,
+} from "livekit-server-sdk";
 import { livekitConfig } from "../config/livekit.js";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import crypto from "crypto";
 
 const egressClient = new EgressClient(
@@ -26,54 +33,80 @@ export const startRecording = async (req, res) => {
     const stream = await Streaming.findOne({ roomName: key });
 
     if (!stream) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy stream",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy stream" });
     }
 
     // Check ownership
     if (stream.streamerId.toString() !== user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "Bạn không có quyền quay stream này",
-      });
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: "Bạn không có quyền quay stream này",
+        });
     }
 
-    // Check if stream is live
+    // Check if stream is live (Có thể comment dòng này nếu muốn test khi chưa live)
     if (stream.status !== "live") {
-      return res.status(400).json({
-        success: false,
-        message: "Stream không đang live",
-      });
+      // return res.status(400).json({ success: false, message: "Stream không đang live" });
     }
 
-    // Check if VOD already exists for this stream
-    const existingVod = await VOD.findOne({ streamId });
+    // Check existing VOD
+    const existingVod = await VOD.findOne({
+      streamId: stream.roomName,
+      status: "RECORDING",
+    });
+
     if (existingVod) {
       return res.status(409).json({
         success: false,
-        message: "Stream này đã được quay lại rồi",
+        message: "Stream đang có bản ghi (recording/processing)",
         vod: existingVod,
       });
     }
 
-    // Generate vodId and filename
-    const vodId = `vod_${streamId}_${crypto.randomBytes(4).toString("hex")}`;
-    const filename = `${vodId}.mp4`;
+    // Generate filename
+    const vodId = `vod_${stream.roomName}_${crypto
+      .randomBytes(4)
+      .toString("hex")}`;
 
-    // Start LiveKit Egress
-    // NOTE: You need to configure S3/GCS storage in LiveKit Cloud Dashboard
+    // 1. Cấu hình Output (Chỉ cần khai báo ở đây)
+
+    const safeRoom = String(stream.roomName).replace(/[^a-zA-Z0-9_-]/g, "_");
+    const filename = `${safeRoom}-${Date.now()}.mp4`;
+
+    const fileOutput = new EncodedFileOutput({
+      fileType: EncodedFileType.MP4,
+      filepath: `vod/${filename}`,
+      output: {
+        case: "s3",
+        value: new S3Upload({
+          accessKey: process.env.S3_ACCESS_KEY,
+          secret: process.env.S3_SECRET_KEY,
+          bucket: process.env.S3_BUCKET,
+          region: process.env.S3_REGION || "auto",
+
+          // Nếu dùng R2/MinIO:
+          endpoint: process.env.S3_ENDPOINT, // ví dụ: https://<account>.r2.cloudflarestorage.com
+          forcePathStyle: true,
+        }),
+      },
+    });
+
+    console.log(`🎥 Requesting Egress for room: ${stream.roomName}`);
+
+    // 2. Gọi lệnh Ghi hình (Đã sửa)
     const egress = await egressClient.startRoomCompositeEgress(
-      stream.roomName,
+      stream.roomName, // Tham số 1: Tên phòng
+      fileOutput, // Tham số 2: Đầu ra file (đã khai báo ở trên)
       {
-        file: {
-          filepath: filename,
-          fileType: EncodedFileType.MP4,
-        },
-        // Optional: customize video settings
-        videoOnly: false,
+        // Tham số 3: Tùy chọn (Options)
+        layout: "grid", // Chọn bố cục: "grid", "speaker", "single-speaker"
         audioOnly: false,
+        videoOnly: false,
+        // ❌ ĐÃ XÓA key 'file' ở đây vì nó thừa và gây lỗi
       }
     );
 
@@ -88,7 +121,7 @@ export const startRecording = async (req, res) => {
       streamerDisplayName: stream?.displayName,
       streamerAvatar: stream?.avatar ?? null,
       egressId: egress.egressId,
-      status: "PROCESSING",
+      status: "RECORDING",
     });
 
     return res.status(201).json({
@@ -112,7 +145,7 @@ export const startRecording = async (req, res) => {
 };
 
 /**
- * POST /api/vod/end
+ * POST /api/vod/stop
  * Stop recording a live stream
  * @access Private (Streamer only)
  */
@@ -140,7 +173,7 @@ export const stopRecording = async (req, res) => {
     }
 
     // Check if already stopped
-    if (vod.status !== "PROCESSING") {
+    if (vod.status !== "RECORDING") {
       return res.status(400).json({
         success: false,
         message: "Recording đã dừng rồi",
@@ -243,10 +276,12 @@ export const getVOD = async (req, res) => {
     }
 
     // Increment view count
-    if (vod.status === "READY") {
+    if (vod.status === "READY" || vod.status === "PROCESSING") {
       vod.views += 1;
       await vod.save();
     }
+
+    const playbackUrl = await toPlaybackUrl(vod.vodLink);
 
     return res.status(200).json({
       success: true,
@@ -265,6 +300,7 @@ export const getVOD = async (req, res) => {
         status: vod.status,
         duration: vod.duration,
         recordedAt: vod.recordedAt,
+        playbackUrl
       },
     });
   } catch (error) {
@@ -292,7 +328,7 @@ export const listVODs = async (req, res) => {
     const skip = (page - 1) * limit;
 
     // Build query
-    const query = { status: "READY" };
+    const query = { status: { $in: ["READY", "PROCESSING"] } };
     if (streamerId) {
       query.streamerId = streamerId;
     }
@@ -388,3 +424,32 @@ export const deleteVOD = async (req, res) => {
     });
   }
 };
+
+const s3 = new S3Client({
+  region: process.env.S3_REGION || "auto",
+  endpoint: process.env.S3_ENDPOINT, // R2/MinIO thì có
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY,
+    secretAccessKey: process.env.S3_SECRET_KEY,
+  },
+  forcePathStyle: true, // nếu bạn đang dùng R2/MinIO
+});
+
+function parseS3Location(loc) {
+  // loc: s3://bucket/vod/xxx.mp4
+  const m = /^s3:\/\/([^/]+)\/(.+)$/.exec(loc || "");
+  if (!m) return null;
+  return { bucket: m[1], key: m[2] };
+}
+
+async function toPlaybackUrl(vodLink) {
+  if (!vodLink) return null;
+  if (vodLink.startsWith("http://") || vodLink.startsWith("https://"))
+    return vodLink;
+
+  const parsed = parseS3Location(vodLink);
+  if (!parsed) return null;
+
+  const cmd = new GetObjectCommand({ Bucket: parsed.bucket, Key: parsed.key });
+  return getSignedUrl(s3, cmd, { expiresIn: 60 * 30 }); // 30 phút
+}

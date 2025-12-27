@@ -9,57 +9,58 @@ const apiSecret = process.env.LIVEKIT_API_SECRET;
 
 export const egressClient = new EgressClient(host, apiKey, apiSecret);
 
-export async function autoStartRecording(roomName) {
-  // 1) tìm stream theo roomName (schema của bạn)
-  const stream = await Stream.findOne({ roomName, status: "live" });
-  if (!stream) return;
+export const autoStartRecording = async (roomName) => {
+  try {
+    // Check xem stream này đang được ghi chưa (dựa vào DB hoặc logic cache)
+    const stream = await Stream.findOne({ roomName });
+    if (stream?.recordingStatus === "recording") {
+      console.log("⚠️ Recording already in progress for:", roomName);
+      return;
+    }
 
-  // 2) idempotent: nếu đã có VOD đang xử lý thì không tạo nữa
-  const existing = await VOD.findOne({
-    streamId: roomName,
-    status: "PROCESSING",
-  });
-  if (existing) return;
+    // Cấu hình output ra file MP4
+    const fileOutput = new EncodedFileOutput({
+      fileType: EncodedFileType.MP4,
+      filepath: `recordings/${roomName}-${Date.now()}.mp4`, // Lưu lên S3 nếu đã config S3
+    });
 
-  const streamer = await User.findById(stream.streamerId)
-    .select("username displayName avatar")
-    .lean();
+    // Gọi lệnh ghi hình (RoomComposite - ghi toàn bộ bố cục phòng)
+    const info = await egressClient.startRoomCompositeEgress(
+      roomName,
+      fileOutput,
+      { layout: "grid" } // Hoặc layout tùy chỉnh của bạn
+    );
 
-  const vodId = `vod_${roomName}_${Date.now()}`;
+    // Cập nhật trạng thái vào DB
+    if (stream) {
+      stream.recordingStatus = "recording";
+      stream.egressId = info.egressId; // Lưu egressId để dùng khi stop
+      await stream.save();
+    }
 
-  // 3) output file (bạn cần cấu hình storage s3/r2/minio thật)
-  const fileOutput = new EncodedFileOutput({
-    filepath: `vods/${vodId}.mp4`,
-    // TODO: cấu hình storage thật tại đây (S3/R2/MinIO)
-    // s3: { access_key, secret, region, bucket, endpoint? }
-  });
+    console.log(
+      `✅ Recording started for ${roomName}, EgressID: ${info.egressId}`
+    );
+    return info;
+  } catch (error) {
+    console.error("Failed to start recording:", error.message);
+  }
+};
 
-  // 4) start egress (record)
-  const egress = await egressClient.startRoomCompositeEgress(roomName, {
-    file: fileOutput,
-    preset: "H264_1080P_30", // OBS bạn đang push 1080p 30fps
-  });
-
-  // 5) tạo bản ghi VOD
-  await VOD.create({
-    vodId,
-    streamId: roomName,
-    title: stream.title || "Untitled VOD",
-    thumbnail: stream.thumbnailUrl ?? null,
-    streamerId: stream.streamerId,
-    streamerUsername: streamer?.username || "unknown",
-    streamerDisplayName:
-      streamer?.displayName || streamer?.username || "unknown",
-    streamerAvatar: streamer?.avatar ?? null,
-    egressId: egress.egressId,
-    status: "PROCESSING",
-  });
-}
-
-export async function autoStopRecording(roomName) {
-  const vod = await VOD.findOne({ streamId: roomName, status: "PROCESSING" });
-  if (!vod?.egressId) return;
-
-  await egressClient.stopEgress(vod.egressId);
-  // giữ PROCESSING, chờ webhook egress_ended để set READY + vodLink
-}
+export const autoStopRecording = async (roomName) => {
+  // Logic stop dựa vào egressId đã lưu trong DB
+  try {
+    const stream = await Stream.findOne({ roomName });
+    if (stream && stream.egressId) {
+      await egressClient.stopEgress(stream.egressId);
+      stream.recordingStatus = "processing";
+      await stream.save();
+      console.log(`✅ Recording stopped for ${roomName}`);
+    }
+  } catch (error) {
+    console.warn(
+      "⚠️ Could not stop recording (maybe already stopped):",
+      error.message
+    );
+  }
+};

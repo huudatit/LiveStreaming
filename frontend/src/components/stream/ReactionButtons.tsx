@@ -36,7 +36,7 @@ export default function ReactionButtons({ roomName }: ReactionButtonsProps) {
     <div className="mt-3 p-2 bg-white/5 rounded-xl border border-white/10">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-slate-300">Reactions</span>
-        <span className="text-xs text-slate-500">Nhấn để gửi</span>
+        <span className="text-xs font-medium text-slate-500">Click to send</span>
       </div>
       <div className="grid grid-cols-6 gap-3">
         {REACTIONS.map(({ emoji, label }) => (

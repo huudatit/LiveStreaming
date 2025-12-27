@@ -21,7 +21,7 @@ export const initSocketService = (io) => {
     });
 
     // Join stream room
-    socket.on("join-stream", async ({ roomName, displayName, userId }) => {
+    socket.on("join-stream", async({ roomName, displayName, userId, clientId }) => {
       try {
         // Clean up any previous rooms this socket was in
         const previousUserInfo = userSockets.get(socket.id);
@@ -34,11 +34,11 @@ export const initSocketService = (io) => {
         if (viewers) {
           const existingSocket = Array.from(viewers).find((id) => {
             const info = userSockets.get(id);
-            return (
-              info?.displayName === displayName &&
-              info?.userId === userId &&
-              id !== socket.id
-            );
+            const sameUser =
+              (userId && info?.userId === userId) ||
+              (!userId && clientId && info?.clientId === clientId);
+
+            return sameUser && id !== socket.id;
           });
 
           if (existingSocket) {
@@ -48,6 +48,7 @@ export const initSocketService = (io) => {
             const oldSocket = io.sockets.sockets.get(existingSocket);
             if (oldSocket) {
               oldSocket.leave(roomName);
+              oldSocket.disconnect(true);
             }
             activeRooms.get(roomName).delete(existingSocket);
             userSockets.delete(existingSocket);
@@ -55,15 +56,15 @@ export const initSocketService = (io) => {
         }
 
         socket.join(roomName);
-        userSockets.set(socket.id, { roomName, displayName, userId });
+        userSockets.set(socket.id, { roomName, displayName, userId, clientId });
         if (!activeRooms.has(roomName)) activeRooms.set(roomName, new Set());
         activeRooms.get(roomName).add(socket.id);
 
         const viewerCount = activeRooms.get(roomName).size;
 
         await Stream.findOneAndUpdate(
-          { roomName, isLive: true },
-          { currentViewers: viewerCount, $max: { peakViewers: viewerCount } }
+          { roomName, status: { $in: ["preparing", "live"] } }, // hoặc { roomName, isLive: true } nếu bạn chỉ muốn khi live
+          { viewerCount, $max: { peakViewerCount: viewerCount } }
         );
 
         io.to(roomName).emit("viewer-count", { count: viewerCount });
@@ -99,7 +100,7 @@ export const initSocketService = (io) => {
 
         try {
           if (!userId || !streamId) {
-            console.warn(`⚠️ Anonymous message in ${roomName}: "${message}"`);
+            console.warn(`Anonymous message in ${roomName}: "${message}"`);
             io.to(roomName).emit("chat-message", {
               displayName,
               message,
@@ -109,7 +110,7 @@ export const initSocketService = (io) => {
           }
 
           if (!streamId.match(/^[0-9a-fA-F]{24}$/)) {
-            console.error(`❌ Invalid streamId format: ${streamId}`);
+            console.error(`Invalid streamId format: ${streamId}`);
             io.to(roomName).emit("chat-message", {
               displayName,
               message,
@@ -135,7 +136,7 @@ export const initSocketService = (io) => {
 
           console.log(`💬 ${displayName}: ${message}`);
         } catch (error) {
-          console.error("❌ Error sending message:", error.message);
+          console.error("Error sending message:", error.message);
           io.to(roomName).emit("chat-message", {
             displayName,
             message,
@@ -173,11 +174,11 @@ export const initSocketService = (io) => {
           // Find the stream by roomName
           const stream = await Stream.findOne({ roomName, isLive: true });
 
-          if (stream && userId) {
+          if (stream) {
             await Reaction.create({
               streamId: stream._id,
-              userId: userId,
-              displayName,
+              userId: userId || undefined,
+              username: displayName || "guest",
               emoji,
             });
             console.log(
@@ -259,9 +260,10 @@ async function handleLeaveRoom(socket, roomName, io) {
     const viewerCount = activeRooms.get(roomName).size;
 
     await Stream.findOneAndUpdate(
-      { roomName, isLive: true },
-      { currentViewers: viewerCount }
+      { roomName, status: { $in: ["preparing", "live"] } },
+      { viewerCount }
     );
+
 
     io.to(roomName).emit("viewer-count", { count: viewerCount });
 

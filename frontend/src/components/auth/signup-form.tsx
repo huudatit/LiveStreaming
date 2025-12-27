@@ -11,15 +11,18 @@ import { useNavigate } from "react-router-dom";
 
 const signUpSchema = z
   .object({
-    username: z.string().min(3, "Tên đăng nhập phải có ít nhất 3 ký tự"),
-    email: z.email("Email không hợp lệ"),
-    displayName: z.string().min(3, "Tên phải có ít nhất 3 kí tự"),
-    password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
-    rePassword: z.string().min(6, "Mật khẩu xác nhận phải có ít nhất 6 ký tự"),
+    username: z.string().min(3, "Username must have at least 3 characters"),
+    email: z.email("Invalid email"),
+    displayName: z.string().min(3, "Name must have at least 3 characters"),
+    password: z.string().min(6, "Password must have at least 6 characters"),
+    rePassword: z
+      .string()
+      .min(6, "Confirmation password must have at least 6 characters"),
   })
+
   .refine((data) => data.password === data.rePassword, {
     path: ["rePassword"],
-    message: "Mật khẩu xác nhận không khớp",
+    message: "Confirmation password does not match",
   });
 
 type SignUpFormValues = z.infer<typeof signUpSchema>;
@@ -66,11 +69,9 @@ export default function SignUpForm({
                   />
                 </a>
 
-                <h1 className="text-2xl font-bold">Tạo tài khoản</h1>
+                <h1 className="text-2xl font-bold">Create an account</h1>
 
-                <p className="text-sm">
-                  Chào mừng bạn! Hãy đăng ký để bắt đầu!
-                </p>
+                <p className="text-sm">Welcome! Sign up to get started!</p>
               </div>
 
               {/* === EMAIL === */}
@@ -94,7 +95,7 @@ export default function SignUpForm({
               {/* === USERNAME === */}
               <div className="flex flex-col gap-3">
                 <Label htmlFor="username" className="block text-sm">
-                  Tên đăng nhập
+                  Username
                 </Label>
                 <Input
                   type="text"
@@ -112,7 +113,7 @@ export default function SignUpForm({
               {/* === DISPLAYNAME=== */}
               <div className="flex flex-col gap-3">
                 <Label htmlFor="displayName" className="block text-sm">
-                  Tên hiển thị
+                  Display Name
                 </Label>
                 <Input
                   type="text"
@@ -130,7 +131,7 @@ export default function SignUpForm({
               {/* === PASSWORD === */}
               <div className="flex flex-col gap-3">
                 <Label htmlFor="password" className="block text-sm">
-                  Mật khẩu
+                  Password
                 </Label>
                 <Input
                   type="password"
@@ -163,14 +164,14 @@ export default function SignUpForm({
 
               {/* === SUBMIT BUTTON === */}
               <Button type="submit" className="w-full" disabled={isSubmitting}>
-                Tạo tài khoản
+                Create an account
               </Button>
 
               {/* === FOOTER === */}
               <div className="text-center">
-                Đã có tài khoản?{" "}
+                Already have an account?{" "}
                 <a href="/signin" className="underline underline-offset-4">
-                  Đăng nhập
+                  Sign In
                 </a>
               </div>
             </div>
@@ -188,8 +189,8 @@ export default function SignUpForm({
       </Card>
 
       <div className=" text-xs text-balance px-6 text-center *:[a]:hover:text-primary text-muted-foreground *:[a]:underline *:[a]:underline-offetset-4">
-        Bằng cách tiếp tục, bạn đồng ý với <a href="#">Điều khoản dịch vụ</a> và{" "}
-        <a href="#">Chính sách bảo mật</a> của chúng tôi.
+        By continuing, you agree to our <a href="#">Terms of Service</a> and our{" "}
+        <a href="#">Privacy Policy</a>.
       </div>
     </div>
   );

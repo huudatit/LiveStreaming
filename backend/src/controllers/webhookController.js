@@ -20,6 +20,10 @@ export const handleLivekitWebhook = async (req, res) => {
 
     // Handle different event types
     switch (event.event) {
+      case "ingress_started":
+        await handleIngressStarted(event);
+        break;
+
       case "room_finished":
         await handleRoomFinished(event);
         break;
@@ -42,6 +46,59 @@ export const handleLivekitWebhook = async (req, res) => {
     res.status(400).json({ success: false, message: error.message });
   }
 };
+
+async function handleIngressStarted(event) {
+  try {
+    const ingressId = event.ingressInfo?.ingressId;
+    const roomName = event.ingressInfo?.roomName || event.room?.name;
+    if (!ingressId && !roomName) return;
+
+    const stream = await Stream.findOne(
+      ingressId ? { ingressId } : { roomName }
+    );
+
+    if (!stream) return;
+
+    // Update stream -> LIVE
+    stream.isLive = true;
+    stream.status = "live";
+    if (!stream.startedAt) stream.startedAt = new Date();
+    await stream.save();
+
+    // Update user -> LIVE (để Subscriptions có badge)
+    await User.updateOne(
+      { _id: stream.streamerId },
+      { $set: { isLive: true } }
+    );
+
+    // Notify followers
+    const io = global.io; // bạn set global.io trong initSocketService :contentReference[oaicite:5]{index=5}
+    if (!io) return;
+
+    const streamer = await User.findById(stream.streamerId)
+      .select("followers username displayName avatar")
+      .lean();
+
+    const payload = {
+      streamerId: streamer?._id?.toString(),
+      username: streamer?.username,
+      displayName: streamer?.displayName,
+      avatar: streamer?.avatar,
+      streamId: stream._id.toString(),
+      roomName: stream.roomName,
+      title: stream.title,
+    };
+
+    for (const fid of streamer?.followers || []) {
+      io.to(`user_${fid.toString()}`).emit("followed-stream-live", payload);
+    }
+
+    console.log("🔔 Notified followers: streamer is LIVE", payload);
+  } catch (e) {
+    console.error("handleIngressStarted error:", e);
+  }
+}
+
 
 // Handle room finished event
 async function handleRoomFinished(event) {
@@ -67,6 +124,11 @@ async function handleRoomFinished(event) {
     stream.status = "ended";
     stream.endedAt = new Date();
     await stream.save();
+    await User.updateOne(
+      { _id: stream.streamerId },
+      { $set: { isLive: false } }
+    );
+
 
     console.log(`✅ Stream ended in DB: ${stream.title}`);
   } catch (error) {
@@ -131,6 +193,10 @@ async function handleIngressEnded(event) {
     await stream.save();
 
     console.log(`✅ Stream ended (OBS disconnected): ${stream.title}`);
+    await User.updateOne(
+      { _id: stream.streamerId },
+      { $set: { isLive: false } }
+    );
 
     // Notify viewers via Socket.IO
     const io = global.io;
