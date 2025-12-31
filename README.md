@@ -9,17 +9,6 @@
 
 ![Express](https://img.shields.io/badge/Express-black?style=flat-square&logo=express) ![Socket.io](https://img.shields.io/badge/Socket.io-black?style=flat-square&logo=socket.io) ![Mongoose](https://img.shields.io/badge/Mongoose-red?style=flat-square) ![React](https://img.shields.io/badge/React-blue?style=flat-square&logo=react) ![TypeScript](https://img.shields.io/badge/TypeScript-blue?style=flat-square&logo=typescript) ![Vite](https://img.shields.io/badge/Vite-purple?style=flat-square&logo=vite) ![Tailwind](https://img.shields.io/badge/Tailwind-blue?style=flat-square&logo=tailwindcss) ![Zod](https://img.shields.io/badge/Zod-blue?style=flat-square)
 
----
-
-## Table of Contents
-* [Overview](#overview)
-* [Getting Started](#getting-started)
-    * [Prerequisites](#prerequisites)
-    * [Installation](#installation)
-    * [Usage](#usage)
-    * [Testing](#testing)
-
----
 
 ## Overview
 LiveStreaming is a full-stack developer toolkit for building real-time, interactive video streaming platforms. It orchestrates live broadcasts, viewer interactions, and scalable media delivery, enabling engaging multimedia experiences.
